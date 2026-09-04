@@ -14,13 +14,23 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { useAuth } from "./context/AuthContext";
-import { Box, Typography, Button, IconButton, useMediaQuery, useTheme } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Button,
+  IconButton,
+  useMediaQuery,
+  useTheme,
+  Snackbar,
+  Alert,
+} from "@mui/material";
 import { ArrowLeft } from "lucide-react";
 import Tiptap from "./components/TiptapEditor/Tiptap.js";
 import Sidebar from "./components/notes/Sidebar";
 import ShareDialog from "./components/notes/ShareDialog";
 import PromptDialog from "./components/notes/PromptDialog";
 import ConfirmDialog from "./components/notes/ConfirmDialog";
+import CollaboratorAvatars from "./components/notes/CollaboratorAvatars";
 import { findUserByEmail } from "./components/utils/findUserByEmail";
 
 const Notes = () => {
@@ -37,6 +47,9 @@ const Notes = () => {
   const [prompt, setPrompt] = useState(null); // { kind, title, label, initial, onSubmit }
   const [confirm, setConfirm] = useState(null); // { title, body, onConfirm }
   const [shareNoteId, setShareNoteId] = useState(null);
+  const [toast, setToast] = useState(null); // { msg, sev }
+
+  const notify = useCallback((msg, sev = "success") => setToast({ msg, sev }), []);
 
   // ---- Realtime data ----
   useEffect(() => {
@@ -124,8 +137,9 @@ const Notes = () => {
         createdBy: user.uid,
         createdAt: serverTimestamp(),
       });
+      notify("Folder created");
     },
-    [user]
+    [user, notify]
   );
 
   const renameNote = useCallback((id, title) => {
@@ -140,8 +154,9 @@ const Notes = () => {
     async (id) => {
       await deleteDoc(doc(db, "notes", id));
       if (selectedNoteId === id) setSelectedNoteId(null);
+      notify("Note deleted");
     },
-    [selectedNoteId]
+    [selectedNoteId, notify]
   );
 
   const deleteFolder = useCallback(async (folderId) => {
@@ -151,7 +166,8 @@ const Notes = () => {
     );
     await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { folderId: null })));
     await deleteDoc(doc(db, "folders", folderId));
-  }, []);
+    notify("Folder deleted");
+  }, [notify]);
 
   const moveNote = useCallback((noteId, folderId) => {
     return updateDoc(doc(db, "notes", noteId), { folderId: folderId || null });
@@ -281,14 +297,20 @@ const Notes = () => {
                       : ""}
                   </Typography>
                 </Box>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => setShareNoteId(selectedNote.id)}
-                  sx={{ py: 0.25, flexShrink: 0 }}
-                >
-                  Share
-                </Button>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, flexShrink: 0 }}>
+                  <CollaboratorAvatars
+                    ownerId={selectedNote.userId}
+                    collaborators={selectedNote.collaborators}
+                  />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => setShareNoteId(selectedNote.id)}
+                    sx={{ py: 0.25 }}
+                  >
+                    Share
+                  </Button>
+                </Box>
               </Box>
               <Box sx={{ flex: 1, minHeight: 0 }}>
                 <Tiptap noteId={selectedNote.id} userId={user.uid} />
@@ -336,17 +358,40 @@ const Notes = () => {
           note={notes.find((n) => n.id === shareNoteId)}
           currentUserId={user.uid}
           canManage={notes.find((n) => n.id === shareNoteId)?.userId === user.uid}
-          onAdd={addCollaboratorByEmail}
-          onRemove={(noteId, uid) =>
-            updateDoc(doc(db, "notes", noteId), {
+          onAdd={async (noteId, email) => {
+            const found = await addCollaboratorByEmail(noteId, email);
+            notify(`Shared with ${found.displayName || found.email}`);
+            return found;
+          }}
+          onRemove={async (noteId, uid) => {
+            await updateDoc(doc(db, "notes", noteId), {
               collaborators: (notes.find((n) => n.id === noteId)?.collaborators || []).filter(
                 (c) => c !== uid
               ),
-            })
-          }
+            });
+            notify("Access removed");
+          }}
           onClose={() => setShareNoteId(null)}
         />
       )}
+
+      <Snackbar
+        open={Boolean(toast)}
+        autoHideDuration={2800}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        {toast ? (
+          <Alert
+            onClose={() => setToast(null)}
+            severity={toast.sev}
+            variant="filled"
+            sx={{ borderRadius: "4px" }}
+          >
+            {toast.msg}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
     </Box>
   );
 };
