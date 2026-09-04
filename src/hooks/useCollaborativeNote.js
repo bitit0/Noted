@@ -133,9 +133,11 @@ export function useCollaborativeNote(noteId) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId, ydoc]);
 
-  useEffect(() => {
-    return () => ydoc.destroy();
-  }, [ydoc]);
+  // Note: the Y.Doc is intentionally not explicitly destroyed here. Under React
+  // StrictMode the component mounts/unmounts twice while keeping the same
+  // useState-held doc, so destroying it on unmount could leave a destroyed doc
+  // in use after remount. The doc is garbage-collected once the editor that
+  // holds it unmounts; the websocket provider and listeners are torn down above.
 
   return { ydoc, provider, status, ready };
 }
