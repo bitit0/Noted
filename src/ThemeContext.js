@@ -42,6 +42,8 @@ export function ThemeProviderWrapper({ children }) {
       /* ignore */
     }
     document.documentElement.setAttribute("data-theme", mode);
+    // Keep the Tiptap editor's internal theme (.dark) in sync with the app mode.
+    document.documentElement.classList.toggle("dark", mode === "dark");
   }, [mode]);
 
   const setMode = useCallback((next) => {
@@ -62,7 +64,7 @@ export function ThemeProviderWrapper({ children }) {
   return (
     <ThemeContext.Provider value={value}>
       <ThemeProvider theme={theme}>
-        <CssBaseline />
+        <CssBaseline enableColorScheme />
         {children}
       </ThemeProvider>
     </ThemeContext.Provider>
