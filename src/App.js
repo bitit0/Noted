@@ -1,11 +1,13 @@
-import React from "react";
+import React, { lazy } from "react";
 import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
 import { Box, CircularProgress } from "@mui/material";
 import { useAuth } from "./context/AuthContext";
 import Home from "./components/Home";
 import Layout from "./components/Layout";
-import Notes from "./Notes";
-import Profile from "./components/Profile.tsx";
+
+// Code-split the authenticated, editor-heavy screens off the initial bundle.
+const Notes = lazy(() => import("./Notes"));
+const Profile = lazy(() => import("./components/Profile.tsx"));
 
 function FullPageLoader() {
   return (

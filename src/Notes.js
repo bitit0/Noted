@@ -14,7 +14,8 @@ import {
   arrayUnion,
 } from "firebase/firestore";
 import { useAuth } from "./context/AuthContext";
-import { Box, Typography, Button } from "@mui/material";
+import { Box, Typography, Button, IconButton, useMediaQuery, useTheme } from "@mui/material";
+import { ArrowLeft } from "lucide-react";
 import Tiptap from "./components/TiptapEditor/Tiptap.js";
 import Sidebar from "./components/notes/Sidebar";
 import ShareDialog from "./components/notes/ShareDialog";
@@ -24,6 +25,8 @@ import { findUserByEmail } from "./components/utils/findUserByEmail";
 
 const Notes = () => {
   const { user } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [notes, setNotes] = useState([]);
   const [folders, setFolders] = useState([]);
@@ -220,66 +223,82 @@ const Notes = () => {
       onConfirm: () => deleteFolder(folder.id),
     });
 
+  const showSidebar = !isMobile || !selectedNote;
+  const showEditorPane = !isMobile || Boolean(selectedNote);
+
   return (
     <Box sx={{ display: "flex", height: "100%", minHeight: 0 }}>
-      <Sidebar
-        user={user}
-        notes={notes}
-        folders={folders}
-        search={search}
-        onSearch={setSearch}
-        selectedNoteId={selectedNoteId}
-        onSelect={setSelectedNoteId}
-        onNewNote={openNewNote}
-        onNewFolder={openNewFolder}
-        onRenameNote={openRenameNote}
-        onDeleteNote={openDeleteNote}
-        onRenameFolder={openRenameFolder}
-        onDeleteFolder={openDeleteFolder}
-        onShareNote={(id) => setShareNoteId(id)}
-        onMoveNote={moveNote}
-      />
+      {showSidebar && (
+        <Sidebar
+          user={user}
+          notes={notes}
+          folders={folders}
+          search={search}
+          onSearch={setSearch}
+          selectedNoteId={selectedNoteId}
+          onSelect={setSelectedNoteId}
+          onNewNote={openNewNote}
+          onNewFolder={openNewFolder}
+          onRenameNote={openRenameNote}
+          onDeleteNote={openDeleteNote}
+          onRenameFolder={openRenameFolder}
+          onDeleteFolder={openDeleteFolder}
+          onShareNote={(id) => setShareNoteId(id)}
+          onMoveNote={moveNote}
+          fullWidth={isMobile}
+        />
+      )}
 
-      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        {selectedNote ? (
-          <>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                px: 3,
-                py: 1.25,
-                borderBottom: "1px solid",
-                borderColor: "divider",
-                bgcolor: "background.paper",
-              }}
-            >
-              <Typography variant="caption" color="text.secondary" noWrap>
-                {selectedNote.shared ? "Shared with you" : "Your note"}
-                {selectedNote.collaborators?.length
-                  ? ` · ${selectedNote.collaborators.length} collaborator${
-                      selectedNote.collaborators.length > 1 ? "s" : ""
-                    }`
-                  : ""}
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                onClick={() => setShareNoteId(selectedNote.id)}
-                sx={{ py: 0.25 }}
+      {showEditorPane && (
+        <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+          {selectedNote ? (
+            <>
+              <Box
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 1,
+                  px: { xs: 1.5, sm: 3 },
+                  py: 1.25,
+                  borderBottom: "1px solid",
+                  borderColor: "divider",
+                  bgcolor: "background.paper",
+                }}
               >
-                Share
-              </Button>
-            </Box>
-            <Box sx={{ flex: 1, minHeight: 0 }}>
-              <Tiptap noteId={selectedNote.id} userId={user.uid} />
-            </Box>
-          </>
-        ) : (
-          <EmptyState onNewNote={() => openNewNote(null)} hasNotes={notes.length > 0} />
-        )}
-      </Box>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                  {isMobile && (
+                    <IconButton size="small" onClick={() => setSelectedNoteId(null)} aria-label="Back to notes">
+                      <ArrowLeft size={18} />
+                    </IconButton>
+                  )}
+                  <Typography variant="caption" color="text.secondary" noWrap>
+                    {selectedNote.shared ? "Shared with you" : "Your note"}
+                    {selectedNote.collaborators?.length
+                      ? ` · ${selectedNote.collaborators.length} collaborator${
+                          selectedNote.collaborators.length > 1 ? "s" : ""
+                        }`
+                      : ""}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setShareNoteId(selectedNote.id)}
+                  sx={{ py: 0.25, flexShrink: 0 }}
+                >
+                  Share
+                </Button>
+              </Box>
+              <Box sx={{ flex: 1, minHeight: 0 }}>
+                <Tiptap noteId={selectedNote.id} userId={user.uid} />
+              </Box>
+            </>
+          ) : (
+            <EmptyState onNewNote={() => openNewNote(null)} hasNotes={notes.length > 0} />
+          )}
+        </Box>
+      )}
 
       {prompt && (
         <PromptDialog

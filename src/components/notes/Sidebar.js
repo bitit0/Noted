@@ -45,6 +45,7 @@ export default function Sidebar({
   onDeleteFolder,
   onShareNote,
   onMoveNote,
+  fullWidth = false,
 }) {
   const [collapsed, setCollapsed] = useState({});
   const [noteMenu, setNoteMenu] = useState(null); // { anchorEl, note }
@@ -143,7 +144,7 @@ export default function Sidebar({
   return (
     <Box
       sx={{
-        width: SIDEBAR_WIDTH,
+        width: fullWidth ? "100%" : SIDEBAR_WIDTH,
         flexShrink: 0,
         height: "100%",
         display: "flex",

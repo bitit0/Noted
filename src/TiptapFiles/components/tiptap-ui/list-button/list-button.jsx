@@ -84,6 +84,8 @@ export function toggleList(editor, type) {
     case "taskList":
       editor.chain().focus().toggleList("taskList", "taskItem").run()
       break
+    default:
+      break
   }
 }
 

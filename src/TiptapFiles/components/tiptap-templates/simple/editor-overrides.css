@@ -73,6 +73,11 @@
 .editor-conn[data-status="synced"] {
   color: #0f766e;
 }
+.editor-wordcount {
+  color: var(--mui-text-faint, #a8a29e);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
 .editor-export-btn {
   display: inline-flex;
   align-items: center;

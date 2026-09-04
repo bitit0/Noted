@@ -1,6 +1,6 @@
-import React from "react";
+import React, { Suspense } from "react";
 import { Outlet } from "react-router-dom";
-import { Box } from "@mui/material";
+import { Box, CircularProgress } from "@mui/material";
 import NotesNavbar from "./NotesNavbar";
 
 const Layout = () => {
@@ -15,7 +15,15 @@ const Layout = () => {
     >
       <NotesNavbar />
       <Box component="main" sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
-        <Outlet />
+        <Suspense
+          fallback={
+            <Box sx={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <CircularProgress size={26} sx={{ color: "primary.main" }} />
+            </Box>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </Box>
     </Box>
   );

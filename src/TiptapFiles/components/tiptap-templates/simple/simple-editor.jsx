@@ -191,6 +191,7 @@ export function SimpleEditor({ noteId, userId, username }) {
 
   const [title, setTitle] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [wordCount, setWordCount] = useState(0);
   const titleTimer = useRef(null);
   const snapshotTimer = useRef(null);
   const uploader = useRef(createNoteImageUploader(noteId));
@@ -271,8 +272,14 @@ export function SimpleEditor({ noteId, userId, username }) {
             ]
           : []),
       ],
+      onCreate: ({ editor: ed }) => {
+        const text = ed.getText().trim();
+        setWordCount(text ? text.split(/\s+/).length : 0);
+      },
       onUpdate: ({ editor: ed }) => {
         setDirty(true);
+        const text = ed.getText().trim();
+        setWordCount(text ? text.split(/\s+/).length : 0);
         if (snapshotTimer.current) clearTimeout(snapshotTimer.current);
         snapshotTimer.current = setTimeout(() => {
           persistMeta({ snapshot: ed.getText().slice(0, 240) });
@@ -351,6 +358,9 @@ export function SimpleEditor({ noteId, userId, username }) {
             )}
           </div>
           <div className="editor-meta-right">
+            <span className="editor-wordcount">
+              {wordCount} {wordCount === 1 ? "word" : "words"}
+            </span>
             <button
               type="button"
               className="editor-export-btn"
