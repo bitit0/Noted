@@ -1,162 +1,122 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { FormControl, TextField, Input, InputLabel, InputAdornment, IconButton, Button, Box } from "@mui/material";
-import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { createUserWithEmailAndPassword } from "firebase/auth"
-import { auth, googleProvider } from "../firebaseConfig";
-import { doc, setDoc, getDoc } from "firebase/firestore";
-import { db } from "../firebaseConfig";
+import {
+  TextField,
+  Button,
+  Box,
+  InputAdornment,
+  IconButton,
+  Alert,
+} from "@mui/material";
+import { Eye, EyeOff } from "lucide-react";
 
-const Signup = () => {
-    const { signup } = useAuth();
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
-    const [firstName, setFirstName] = useState("");
-    const [lastName, setLastName] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [passwordError, setPasswordError] = useState("");
-    const [emailError, setEmailError] = useState("");
+const FRIENDLY_ERRORS = {
+  "auth/email-already-in-use": "An account already exists with that email.",
+  "auth/invalid-email": "That email address doesn't look right.",
+  "auth/weak-password": "Password should be at least 6 characters.",
+};
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+const isValidEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-        if (password !== confirmPassword) {
-            setPasswordError(true);
-            return;
-        }
+const Signup = ({ onSuccess }) => {
+  const { signup } = useAuth();
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-        if (!isValidEmail(email)) {
-            setEmailError(true);
-            return;
-        }
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
 
-        setPasswordError(false);
-        setEmailError(false);
+    if (!isValidEmail(email)) return setError("Please enter a valid email address.");
+    if (password.length < 6) return setError("Password should be at least 6 characters.");
+    if (password !== confirm) return setError("Passwords do not match.");
 
-        try {
-            const userCredentials = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredentials.user;
-
-            await setDoc(doc(db, "users", user.uid), {
-                firstName,
-                lastName,
-                email: user.email,
-                createdAt: new Date()
-            });
-
-            console.log("New user saved to database.");
-
-        } catch (error) {
-            console.error("Error signing up: ", error.message);
-        }
-    };
-
-    const handleClickShowPassword = () => setShowPassword((show) => !show);
-
-    const handleMouseDownPassword = (event) => {
-      event.preventDefault();
-    };
-  
-    const handleMouseUpPassword = (event) => {
-      event.preventDefault();
-    };
-
-    const isValidEmail = (email) => {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    setSubmitting(true);
+    try {
+      await signup(email.trim(), password, firstName.trim(), lastName.trim());
+      onSuccess?.();
+    } catch (err) {
+      setError(FRIENDLY_ERRORS[err.code] || "Could not create your account. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
+  };
 
-    return (
-        <>
-            <form onSubmit={handleSubmit}>
-                <Box
-                    sx={{ display:"flex", justifyContent:"center"}}>
-                    <FormControl sx={{ m: 1, width: '50%' }} variant='standard'>
-                        <TextField id="firstName" label="First Name" variant="standard" value={firstName} onChange={(e) => setFirstName(e.target.value)}/>
-                    </FormControl>
-                    <FormControl sx={{ m: 1, width: '50%' }} variant='standard'>
-                        <TextField id="lastName" label="Last Name" variant="standard" value={lastName} onChange={(e) => setLastName(e.target.value)}/>
-                    </FormControl>
-                </Box>
-               
-                <FormControl sx={{ m: 1, width: '95%' }} variant='standard'>
-                    <TextField id="emailField" label="Email" variant="standard" value={email} onChange={(e) => setEmail(e.target.value)}/>
-                    {emailError && (
-                        <p style={{ color: "red", fontSize: "0.8rem", marginTop: "4px" }}>
-                        Email is not valid.
-                        </p>
-                    )}
-                </FormControl>
-                <FormControl sx={{ m: 1, width: '95%'}} variant='standard'>
-                    <InputLabel>Password</InputLabel>
-                    <Input
-                    id="passwordField"
-                    variant="standard"
-                    label="Password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    fullWidth
-                    type={showPassword ? 'text' : 'password'}
-                    endAdornment={
-                        <InputAdornment position="end">
-                        <IconButton
-                            aria-label={
-                            showPassword ? 'hide the password' : 'display the password'
-                            }
-                            onClick={handleClickShowPassword}
-                            onMouseDown={handleMouseDownPassword}
-                            onMouseUp={handleMouseUpPassword}
-                        >
-                            {showPassword ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                        </InputAdornment>
-                    }
-                    />
-                </FormControl>
-                <FormControl sx={{ m: 1, width: '95%' }} variant='standard'>
-                    <InputLabel>Confirm Password</InputLabel>
-                    <Input
-                        id="confirmPasswordField"
-                        variant="standard"
-                        label="Confirm Password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        fullWidth
-                        type={showPassword ? 'text' : 'password'}
-                        endAdornment={
-                        <InputAdornment position="end">
-                            <IconButton
-                            aria-label={showPassword ? 'hide the password' : 'display the password'}
-                            onClick={handleClickShowPassword}
-                            onMouseDown={handleMouseDownPassword}
-                            onMouseUp={handleMouseUpPassword}
-                            >
-                            {showPassword ? <VisibilityOff /> : <Visibility />}
-                            </IconButton>
-                        </InputAdornment>
-                        }
-                    />
-                    {passwordError && (
-                        <p style={{ color: "red", fontSize: "0.8rem", marginTop: "4px" }}>
-                        Passwords do not match.
-                        </p>
-                    )}
-                </FormControl>
-                <Button
-                color="secondary" 
-                type="submit"
-                variant="contained"
-                sx={{
-                    width:"100%",
-                    marginTop: "5%"
-                }}>
-                    Signup
-            </Button>
-            </form>
-            
-        </>
-    );
-
-}
+  return (
+    <Box component="form" onSubmit={handleSubmit} sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      {error && (
+        <Alert severity="error" sx={{ borderRadius: "4px", py: 0.25 }}>
+          {error}
+        </Alert>
+      )}
+      <Box sx={{ display: "flex", gap: 1.5 }}>
+        <TextField
+          label="First name"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          fullWidth
+          size="small"
+          autoComplete="given-name"
+        />
+        <TextField
+          label="Last name"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          fullWidth
+          size="small"
+          autoComplete="family-name"
+        />
+      </Box>
+      <TextField
+        label="Email"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        fullWidth
+        size="small"
+        autoComplete="email"
+        required
+      />
+      <TextField
+        label="Password"
+        type={showPassword ? "text" : "password"}
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+        fullWidth
+        size="small"
+        autoComplete="new-password"
+        required
+        InputProps={{
+          endAdornment: (
+            <InputAdornment position="end">
+              <IconButton onClick={() => setShowPassword((s) => !s)} edge="end" size="small">
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </IconButton>
+            </InputAdornment>
+          ),
+        }}
+      />
+      <TextField
+        label="Confirm password"
+        type={showPassword ? "text" : "password"}
+        value={confirm}
+        onChange={(e) => setConfirm(e.target.value)}
+        fullWidth
+        size="small"
+        autoComplete="new-password"
+        required
+      />
+      <Button type="submit" variant="contained" fullWidth disabled={submitting} sx={{ py: 1 }}>
+        {submitting ? "Creating account…" : "Create account"}
+      </Button>
+    </Box>
+  );
+};
 
 export default Signup;

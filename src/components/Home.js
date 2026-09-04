@@ -1,138 +1,148 @@
-import React, { useState } from 'react';
-import Login from './Login';
-import Signup from './Signup';
-import GoogleLogin from './GoogleLogin';
-import { Button, TextField, Typography, Box, Container, ButtonGroup, ToggleButton, ToggleButtonGroup, InputLabel, FilledInput, InputAdornment, IconButton } from "@mui/material";
-import { useAuth } from "../context/AuthContext";
-import { Visibility, VisibilityOff } from '@mui/icons-material';
-import { FormControl, Input } from '@mui/material';
+import React, { useState } from "react";
+import { Box, Typography, Container } from "@mui/material";
+import Login from "./Login";
+import Signup from "./Signup";
+import GoogleLogin from "./GoogleLogin";
+
+const FEATURES = [
+  "Real-time collaborative editing, powered by CRDTs",
+  "Organize notes into folders, share with a teammate by email",
+  "A focused, distraction-free writing surface",
+];
 
 const Home = () => {
-
-    const [alignment, setAlignment] = React.useState('login');
-    const [isLogin, setIsLogin] = useState(true);
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
-    const [firstName, setFirstName] = useState("");
-    const [lastName, setLastName] = useState("");
-
-    const { login } = useAuth();
-    const { signInWithGoogle } = useAuth();
-
-    const handleButtonClick = (type) => {
-        setIsLogin(type === "login");
-    }
-
-    const handleSubmit = async (e) => {
-      e.preventDefault();
-      try {
-          await login(email, password);
-      } catch (error) {
-          console.error("Error logging in: ", error.message);
-      }
-    };
-
-    const handleClickShowPassword = () => setShowPassword((show) => !show);
-
-    const handleMouseDownPassword = (event) => {
-      event.preventDefault();
-    };
-  
-    const handleMouseUpPassword = (event) => {
-      event.preventDefault();
-    };
+  const [tab, setTab] = useState("login");
 
   return (
-    <>
-      <Box sx={{
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        minHeight: "100vh"
-      }}>
-        <Typography variant="h3" fontWeight="bold" align="center" sx={{ mb: 1 }}>
-        Noted!
-        </Typography>
-        <Typography variant="h6" align="center" sx={{ mb: 3 }}>
-          Take notes efficiently!
-        </Typography>
-        <Container maxWidth="xs"
+    <Box sx={{ minHeight: "100vh", display: "flex", bgcolor: "background.default" }}>
+      {/* Brand / editorial panel */}
+      <Box
+        sx={{
+          flex: 1,
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          justifyContent: "space-between",
+          p: 6,
+          borderRight: "1px solid",
+          borderColor: "divider",
+          bgcolor: "background.paper",
+        }}
+      >
+        <Typography
           sx={{
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}>
-            
-            <Box
+            fontFamily: '"Space Grotesk", sans-serif',
+            fontWeight: 700,
+            fontSize: 22,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          Noted
+        </Typography>
+
+        <Box sx={{ maxWidth: 460 }}>
+          <Typography
+            variant="h2"
+            sx={{ fontSize: { md: 44, lg: 52 }, lineHeight: 1.05, mb: 3 }}
+          >
+            Write together,
+            <br />
+            in real time.
+          </Typography>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            {FEATURES.map((f) => (
+              <Box key={f} sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+                <Box
+                  sx={{
+                    width: 6,
+                    height: 6,
+                    mt: "7px",
+                    flexShrink: 0,
+                    bgcolor: "primary.main",
+                  }}
+                />
+                <Typography color="text.secondary">{f}</Typography>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+
+        <Typography variant="caption" color="text.secondary">
+          A collaborative notes workspace.
+        </Typography>
+      </Box>
+
+      {/* Auth panel */}
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: { xs: 3, sm: 6 },
+        }}
+      >
+        <Container maxWidth="xs" disableGutters>
+          <Typography
             sx={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              padding: 3,
-              borderRadius: 2,
-              boxShadow: 3,
-              backgroundColor: "#fff",
+              display: { xs: "block", md: "none" },
+              fontFamily: '"Space Grotesk", sans-serif',
+              fontWeight: 700,
+              fontSize: 24,
+              mb: 3,
             }}
           >
-            <Box sx={{ display: "flex", width: "100%", marginBottom: 2 }}>
-              <Button
-                variant="contained"
-                color={isLogin ? "primary" : "default"}
-                onClick={() => handleButtonClick("login")}
-                sx={{
-                  width:"100%",
-                  textTransform:"none"
-                }}>
-                  Login
-                </Button>
-              <Button
-                variant="contained"
-                color={isLogin ? "default" : "primary"}
-                onClick={() => handleButtonClick("signup")}
-                sx={{
-                  width:"100%",
-                  textTransform:"none"
-                }}>
-                  Sign Up
-              </Button>
-            </Box>
+            Noted
+          </Typography>
 
-              {isLogin ? <Login/> : <Signup/>}
+          <Typography variant="h4" sx={{ mb: 0.5 }}>
+            {tab === "login" ? "Welcome back" : "Create your account"}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+            {tab === "login"
+              ? "Sign in to continue to your notes."
+              : "Start writing and collaborating in minutes."}
+          </Typography>
 
-              {/* <FormControl sx={{ m: 1, width: '95%' }} variant='standard'>
-                <InputLabel htmlFor="emailField">Email</InputLabel>
-                <Input id="emailField" alignItems="center"></Input>
-              </FormControl>
-              <FormControl sx={{ m: 1, width: '95%'}} variant='standard'>
-                <InputLabel htmlFor="passwordField">Password</InputLabel>
-                <Input
-                  id="passwordField"
-                  fullWidth
-                  type={showPassword ? 'text' : 'password'}
-                  endAdornment={
-                    <InputAdornment position="end">
-                      <IconButton
-                        aria-label={
-                          showPassword ? 'hide the password' : 'display the password'
-                        }
-                        onClick={handleClickShowPassword}
-                        onMouseDown={handleMouseDownPassword}
-                        onMouseUp={handleMouseUpPassword}
-                      >
-                        {showPassword ? <VisibilityOff /> : <Visibility />}
-                      </IconButton>
-                    </InputAdornment>
-                  }
-                />
-              </FormControl> */}
-            
+          {/* Segmented toggle — ghost, underline for the active tab */}
+          <Box sx={{ display: "flex", gap: 3, mb: 3, borderBottom: "1px solid", borderColor: "divider" }}>
+            {[
+              { id: "login", label: "Sign in" },
+              { id: "signup", label: "Sign up" },
+            ].map((o) => (
+              <Box
+                key={o.id}
+                onClick={() => setTab(o.id)}
+                sx={{
+                  cursor: "pointer",
+                  pb: 1.25,
+                  mb: "-1px",
+                  fontWeight: 600,
+                  fontSize: 14,
+                  color: tab === o.id ? "text.primary" : "text.secondary",
+                  borderBottom: "2px solid",
+                  borderColor: tab === o.id ? "primary.main" : "transparent",
+                  transition: "color 120ms",
+                }}
+              >
+                {o.label}
+              </Box>
+            ))}
           </Box>
+
+          {tab === "login" ? <Login /> : <Signup onSuccess={() => setTab("login")} />}
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, my: 2.5 }}>
+            <Box sx={{ flex: 1, height: "1px", bgcolor: "divider" }} />
+            <Typography variant="caption" color="text.secondary">
+              or
+            </Typography>
+            <Box sx={{ flex: 1, height: "1px", bgcolor: "divider" }} />
+          </Box>
+
+          <GoogleLogin />
         </Container>
       </Box>
-    </>
+    </Box>
   );
 };
 

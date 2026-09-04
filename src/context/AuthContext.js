@@ -1,91 +1,95 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
-import { auth, googleProvider } from "../firebaseConfig";
-import { onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup } from "firebase/auth";
-import { app } from "../firebaseConfig";
-import { db } from "../firebaseConfig";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import { auth, googleProvider, db } from "../firebaseConfig";
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  signInWithPopup,
+  updateProfile,
+} from "firebase/auth";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 
-const AuthContext = createContext();
+const AuthContext = createContext(null);
 
-export const useAuth = () => {
-    return useContext(AuthContext);
-};
+export const useAuth = () => useContext(AuthContext);
+
+/**
+ * Create (or backfill) the Firestore profile document for a user. Idempotent:
+ * safe to call on every sign-in. Ensures `emailLower` exists so collaborators
+ * can be found by email without an admin backend.
+ */
+async function ensureUserProfile(user, extra = {}) {
+  if (!user) return;
+  const userRef = doc(db, "users", user.uid);
+  const snap = await getDoc(userRef);
+
+  const nameParts = (user.displayName || "").trim().split(/\s+/).filter(Boolean);
+  const firstName = extra.firstName || nameParts[0] || "";
+  const lastName = extra.lastName || nameParts.slice(1).join(" ") || "";
+  const displayName =
+    user.displayName || [firstName, lastName].filter(Boolean).join(" ") || "Anonymous";
+
+  if (!snap.exists()) {
+    await setDoc(userRef, {
+      uid: user.uid,
+      email: user.email || "",
+      emailLower: (user.email || "").toLowerCase(),
+      firstName,
+      lastName,
+      displayName,
+      photoURL: user.photoURL || "",
+      createdAt: serverTimestamp(),
+    });
+  } else if (!snap.data().emailLower && user.email) {
+    // Backfill for legacy profiles created before emailLower existed.
+    await setDoc(userRef, { emailLower: user.email.toLowerCase() }, { merge: true });
+  }
+}
 
 export const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    const [user, setUser] = useState(null);
-
-    useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-            setUser(currentUser);
-        });
-        return () => unsubscribe();
-    }, [auth]);
-
-    // Email auth
-    const signup = async (email, password) => {
-
-        // try {
-
-        //     const userCredentials = await createUserWithEmailAndPassword(auth, email, password);
-        //     const user = userCredentials.user;
-
-        //     await setDoc(doc(db, "users", user.uid), {
-        //         firstName,
-        //         lastName,
-        //         email: user.email,
-        //         createdAt: new Date()
-        //     });
-
-        //     console.log("New user saved to database.");
-
-        //     return user;
-        // } catch (err) {
-        //     console.log("signup error: ", err);
-        // }
-    }
-    const login = (email, password) => signInWithEmailAndPassword(auth, email, password);
-    const logout = () => signOut(auth);
-
-    // Google auth
-    const signInWithGoogle = async () => {
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+      if (currentUser) {
         try {
-            const userCredentials = await signInWithPopup(auth, googleProvider);
-            const user = userCredentials.user;
-
-            return user;
-        } catch (error) {
-            console.error("User doc error: ", error);
+          await ensureUserProfile(currentUser);
+        } catch (err) {
+          console.error("[Auth] Failed to ensure profile:", err);
         }
+      }
+    });
+    return unsubscribe;
+  }, []);
+
+  const signup = useCallback(async (email, password, firstName = "", lastName = "") => {
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const displayName = [firstName, lastName].filter(Boolean).join(" ");
+    if (displayName) {
+      await updateProfile(cred.user, { displayName });
     }
-    
-    async function createUserProfile(user) {
+    await ensureUserProfile(cred.user, { firstName, lastName });
+    return cred.user;
+  }, []);
 
-        const userRef = doc(db, "users", user.uid);
-        const userSnap = await getDoc(userRef);
+  const login = useCallback(
+    (email, password) => signInWithEmailAndPassword(auth, email, password),
+    []
+  );
 
-        if (!userSnap.exists()) {
-            const nameParts = user.displayName?.split(" ") ?? [];
-            const firstName = nameParts[0] ?? "";
-            const lastName = nameParts[1] ?? "";
+  const logout = useCallback(() => signOut(auth), []);
 
-            await setDoc(userRef, {
-                uid: user.uid,
-                email: user.email,
-                firstName,
-                lastName,
-                displayName: user.displayName ?? `${firstName} ${lastName}`,
-                createdAt: serverTimestamp(),
-            });
+  const signInWithGoogle = useCallback(async () => {
+    const cred = await signInWithPopup(auth, googleProvider);
+    await ensureUserProfile(cred.user);
+    return cred.user;
+  }, []);
 
-            console.log("[UserProfile] Created new user profile");
-        } 
-    }
+  const value = { user, loading, signup, login, logout, signInWithGoogle };
 
-    return (
-        <AuthContext.Provider value= {{ user, signup, login, logout, signInWithGoogle }}>
-            {children}
-        </AuthContext.Provider>
-    );
-
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

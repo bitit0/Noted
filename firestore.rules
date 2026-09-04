@@ -1,0 +1,63 @@
+rules_version = '2';
+
+// Noted — Firestore security rules
+// Data model:
+//   users/{uid}     : { uid, email, emailLower, firstName, lastName, displayName, photoURL, createdAt }
+//   folders/{id}    : { name, parentId, createdBy, createdAt }
+//   notes/{id}      : { title, userId (owner), collaborators: [uid], folderId,
+//                       ydocState, snapshot, createdAt, updatedAt }
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwnerField(field) {
+      return signedIn() && request.auth.uid == resource.data[field];
+    }
+
+    // ---- Users ----
+    // Any signed-in user may read profiles (needed to resolve collaborators by
+    // email and render their names/avatars, like a Docs share dialog).
+    // A user may only create/modify their own profile document.
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.auth.uid == uid;
+      allow update, delete: if signedIn() && request.auth.uid == uid;
+    }
+
+    // ---- Folders ----
+    match /folders/{folderId} {
+      allow read: if isOwnerField('createdBy');
+      allow create: if signedIn()
+                    && request.auth.uid == request.resource.data.createdBy;
+      allow update, delete: if isOwnerField('createdBy');
+    }
+
+    // ---- Notes ----
+    function isNoteOwner() {
+      return signedIn() && request.auth.uid == resource.data.userId;
+    }
+    function isCollaborator() {
+      return signedIn()
+             && resource.data.collaborators is list
+             && request.auth.uid in resource.data.collaborators;
+    }
+
+    match /notes/{noteId} {
+      allow read: if isNoteOwner() || isCollaborator();
+
+      allow create: if signedIn()
+                    && request.auth.uid == request.resource.data.userId;
+
+      // Owner has full control. Collaborators may edit content but may not
+      // take ownership away from the owner.
+      allow update: if isNoteOwner()
+                    || (isCollaborator()
+                        && request.resource.data.userId == resource.data.userId);
+
+      allow delete: if isNoteOwner();
+    }
+  }
+}

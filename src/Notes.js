@@ -1,493 +1,364 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { db } from "./firebaseConfig";
-import { doc, addDoc, getDocs, updateDoc, deleteDoc, onSnapshot, getDoc } from "firebase/firestore";
-import { collection, where, query, Timestamp, arrayUnion } from "firebase/firestore";
-import { useAuth } from "./context/AuthContext";
-import { getAuth } from "firebase/auth";
-import Logout from "./components/Logout";
-import _ from "lodash";
-import NotesNavbar from "./components/NotesNavbar";
-import { Box, Typography, List, ListItem, ListItemText, Button, Divider } from '@mui/material';
-import { Collapse, ListItemIcon } from '@mui/material';
-import { ExpandLess, ExpandMore, Folder } from '@mui/icons-material';
-import Editor from './components/Editor/Editor.js';
 import {
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  IconButton
-} from '@mui/material';
-import { Close } from '@mui/icons-material';
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  onSnapshot,
+  collection,
+  query,
+  where,
+  getDocs,
+  serverTimestamp,
+  arrayUnion,
+} from "firebase/firestore";
+import { useAuth } from "./context/AuthContext";
+import { Box, Typography, Button } from "@mui/material";
 import Tiptap from "./components/TiptapEditor/Tiptap.js";
-import { useTheme } from "@mui/material";
-
-
-
+import Sidebar from "./components/notes/Sidebar";
+import ShareDialog from "./components/notes/ShareDialog";
+import PromptDialog from "./components/notes/PromptDialog";
+import ConfirmDialog from "./components/notes/ConfirmDialog";
+import { findUserByEmail } from "./components/utils/findUserByEmail";
 
 const Notes = () => {
-    
-    const { user } = useAuth();
+  const { user } = useAuth();
 
-    const theme = useTheme();
+  const [notes, setNotes] = useState([]);
+  const [folders, setFolders] = useState([]);
+  const [selectedNoteId, setSelectedNoteId] = useState(null);
+  const [search, setSearch] = useState("");
 
-    const [title, setTitle] = useState("");
-    const [content, setContent] = useState("");
-    const [notes, setNotes] = useState([]);
-    const [editingNote, setEditingNote] = useState(null);
-    const [collaboratorEmail, setCollaboratorEmail] = useState("");
-    const [text, setText] = useState("");
-    const [selectedFile, setSelectedFile] = useState(null);
-    const [selectedFolderId, setSelectedFolderId] = useState(null);
-    const [openFolders, setOpenFolders] = useState({});
-    const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [dialogType, setDialogType] = useState("");
-    const [newName, setNewName] = useState("");
-    const [selectedNoteId, setSelectedNoteId] = useState(null);
-    const [dialogTitle, setDialogTitle] = useState("");
-    const [dialogTextField, setDialogTextField] = useState("");
-    const [sharedNotes, setSharedNotes] = useState("");
-    const [displayName, setDisplayname] = useState("");
+  // dialog state
+  const [prompt, setPrompt] = useState(null); // { kind, title, label, initial, onSubmit }
+  const [confirm, setConfirm] = useState(null); // { title, body, onConfirm }
+  const [shareNoteId, setShareNoteId] = useState(null);
 
-    const openDialog = (type) => {
-        setDialogType(type);
-        setIsDialogOpen(true);
-        switch (type) {
-            case "folder":
-                setDialogTitle("Create Folder");
-                setDialogTextField("Folder Name");
-                break;
-            case "file":
-                setDialogTitle("Create File");
-                setDialogTextField("File Name");
-                break;
-            case "collab":
-                setDialogTitle("Add Collaborator");
-                setDialogTextField("Collaborator Email");
-                break;
-        }
+  // ---- Realtime data ----
+  useEffect(() => {
+    if (!user) return undefined;
+
+    const unsubFolders = onSnapshot(
+      query(collection(db, "folders"), where("createdBy", "==", user.uid)),
+      (snap) => setFolders(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      (err) => console.error("[notes] folders listener:", err)
+    );
+
+    let owned = [];
+    let shared = [];
+    const merge = () => {
+      const byId = new Map();
+      owned.forEach((n) => byId.set(n.id, n));
+      shared.forEach((n) => {
+        if (!byId.has(n.id)) byId.set(n.id, n);
+      });
+      setNotes(Array.from(byId.values()));
     };
 
-    const closeDialog = () => {
-        setIsDialogOpen(false);
-        setNewName("");
+    const unsubOwned = onSnapshot(
+      query(collection(db, "notes"), where("userId", "==", user.uid)),
+      (snap) => {
+        owned = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        merge();
+      },
+      (err) => console.error("[notes] owned listener:", err)
+    );
+
+    const unsubShared = onSnapshot(
+      query(collection(db, "notes"), where("collaborators", "array-contains", user.uid)),
+      (snap) => {
+        shared = snap.docs.map((d) => ({ id: d.id, ...d.data(), shared: true }));
+        merge();
+      },
+      (err) => console.error("[notes] shared listener:", err)
+    );
+
+    return () => {
+      unsubFolders();
+      unsubOwned();
+      unsubShared();
     };
+  }, [user]);
 
-    const [folders, setFolders] = useState([
-        { id: '1', name: 'Work', parentId: null },
-        { id: '2', name: 'Personal', parentId: null }
-    ]);
+  // Keep selection valid.
+  useEffect(() => {
+    if (selectedNoteId && !notes.some((n) => n.id === selectedNoteId)) {
+      setSelectedNoteId(null);
+    }
+  }, [notes, selectedNoteId]);
 
-    const handleNoteClick = (note) => {
-        setSelectedNoteId(note.id);
-    };
+  const selectedNote = useMemo(
+    () => notes.find((n) => n.id === selectedNoteId) || null,
+    [notes, selectedNoteId]
+  );
 
-    const toggleFolder = (id) => {
-        setOpenFolders(prev => {
-            const newState = { ...prev, [id]: !prev[id] };
-            console.log("toggleFolder state:", newState);
-            return newState;
-        });
-    };
+  // ---- Actions ----
+  const createNote = useCallback(
+    async (title, folderId = null) => {
+      if (!user) return;
+      const ref = await addDoc(collection(db, "notes"), {
+        title: title?.trim() || "Untitled",
+        userId: user.uid,
+        collaborators: [],
+        folderId: folderId || null,
+        snapshot: "",
+        ydocState: null,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setSelectedNoteId(ref.id);
+    },
+    [user]
+  );
 
-    const handleCreateNote = async (name) => {
-        if (!name || !user) return;
+  const createFolder = useCallback(
+    async (name) => {
+      if (!user || !name?.trim()) return;
+      await addDoc(collection(db, "folders"), {
+        name: name.trim(),
+        parentId: null,
+        createdBy: user.uid,
+        createdAt: serverTimestamp(),
+      });
+    },
+    [user]
+  );
 
-        try {
-            const fileRef = await addDoc(collection(db, "notes"), {
-                title: name,
-                content: "",
-                folderId: selectedFolderId,
-                createdAt: Timestamp.fromDate(new Date()),
-                updatedAt: Timestamp.fromDate(new Date()),
-                userId: user.uid,
-                collaborators: [],
-            });
+  const renameNote = useCallback((id, title) => {
+    return updateDoc(doc(db, "notes", id), { title: title.trim() || "Untitled" });
+  }, []);
 
-            console.log("Created file!");
-        } catch (error) {
-            console.error("Error creating note: ", error);
-        }
-    };
+  const renameFolder = useCallback((id, name) => {
+    return updateDoc(doc(db, "folders", id), { name: name.trim() || "Untitled" });
+  }, []);
 
-    const handleCreateFolder = async (name, parentId = null) => {
+  const deleteNote = useCallback(
+    async (id) => {
+      await deleteDoc(doc(db, "notes", id));
+      if (selectedNoteId === id) setSelectedNoteId(null);
+    },
+    [selectedNoteId]
+  );
 
-        if (!name || !user) return;
+  const deleteFolder = useCallback(async (folderId) => {
+    // Un-file this folder's notes, then remove the folder.
+    const snap = await getDocs(
+      query(collection(db, "notes"), where("folderId", "==", folderId))
+    );
+    await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { folderId: null })));
+    await deleteDoc(doc(db, "folders", folderId));
+  }, []);
 
-        try {
-            const folderRef = await addDoc(collection(db, "folders"), {
-                name,
-                parentId,
-                createdAt: Timestamp.fromDate(new Date()),
-                createdBy: user.uid,
-            });
+  const moveNote = useCallback((noteId, folderId) => {
+    return updateDoc(doc(db, "notes", noteId), { folderId: folderId || null });
+  }, []);
 
-            setFolders(prev => [...prev, { id: folderRef.id, name, parentId: null }]);
+  const addCollaboratorByEmail = useCallback(
+    async (noteId, email) => {
+      const found = await findUserByEmail(email);
+      if (!found) throw new Error("No Noted user found with that email.");
+      if (found.uid === user.uid) throw new Error("That's you — you already own this note.");
+      await updateDoc(doc(db, "notes", noteId), {
+        collaborators: arrayUnion(found.uid),
+      });
+      return found;
+    },
+    [user]
+  );
 
-            console.log("Folder created successfully.");
-          } catch (error) {
-            console.error("Error creating folder: ", error.message);
+  // ---- Dialog openers ----
+  const openNewNote = (folderId = null) =>
+    setPrompt({
+      title: "New note",
+      label: "Note title",
+      initial: "",
+      submitLabel: "Create",
+      onSubmit: (v) => createNote(v, folderId),
+    });
+
+  const openNewFolder = () =>
+    setPrompt({
+      title: "New folder",
+      label: "Folder name",
+      initial: "",
+      submitLabel: "Create",
+      onSubmit: (v) => createFolder(v),
+    });
+
+  const openRenameNote = (note) =>
+    setPrompt({
+      title: "Rename note",
+      label: "Note title",
+      initial: note.title || "",
+      submitLabel: "Save",
+      onSubmit: (v) => renameNote(note.id, v),
+    });
+
+  const openRenameFolder = (folder) =>
+    setPrompt({
+      title: "Rename folder",
+      label: "Folder name",
+      initial: folder.name || "",
+      submitLabel: "Save",
+      onSubmit: (v) => renameFolder(folder.id, v),
+    });
+
+  const openDeleteNote = (note) =>
+    setConfirm({
+      title: "Delete note?",
+      body: `"${note.title || "Untitled"}" will be permanently deleted. This cannot be undone.`,
+      confirmLabel: "Delete",
+      onConfirm: () => deleteNote(note.id),
+    });
+
+  const openDeleteFolder = (folder) =>
+    setConfirm({
+      title: "Delete folder?",
+      body: `"${folder.name}" will be deleted. Its notes will be moved to Unfiled.`,
+      confirmLabel: "Delete",
+      onConfirm: () => deleteFolder(folder.id),
+    });
+
+  return (
+    <Box sx={{ display: "flex", height: "100%", minHeight: 0 }}>
+      <Sidebar
+        user={user}
+        notes={notes}
+        folders={folders}
+        search={search}
+        onSearch={setSearch}
+        selectedNoteId={selectedNoteId}
+        onSelect={setSelectedNoteId}
+        onNewNote={openNewNote}
+        onNewFolder={openNewFolder}
+        onRenameNote={openRenameNote}
+        onDeleteNote={openDeleteNote}
+        onRenameFolder={openRenameFolder}
+        onDeleteFolder={openDeleteFolder}
+        onShareNote={(id) => setShareNoteId(id)}
+        onMoveNote={moveNote}
+      />
+
+      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {selectedNote ? (
+          <>
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                px: 3,
+                py: 1.25,
+                borderBottom: "1px solid",
+                borderColor: "divider",
+                bgcolor: "background.paper",
+              }}
+            >
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {selectedNote.shared ? "Shared with you" : "Your note"}
+                {selectedNote.collaborators?.length
+                  ? ` · ${selectedNote.collaborators.length} collaborator${
+                      selectedNote.collaborators.length > 1 ? "s" : ""
+                    }`
+                  : ""}
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setShareNoteId(selectedNote.id)}
+                sx={{ py: 0.25 }}
+              >
+                Share
+              </Button>
+            </Box>
+            <Box sx={{ flex: 1, minHeight: 0 }}>
+              <Tiptap noteId={selectedNote.id} userId={user.uid} />
+            </Box>
+          </>
+        ) : (
+          <EmptyState onNewNote={() => openNewNote(null)} hasNotes={notes.length > 0} />
+        )}
+      </Box>
+
+      {prompt && (
+        <PromptDialog
+          open
+          title={prompt.title}
+          label={prompt.label}
+          initial={prompt.initial}
+          submitLabel={prompt.submitLabel}
+          onClose={() => setPrompt(null)}
+          onSubmit={async (v) => {
+            await prompt.onSubmit(v);
+            setPrompt(null);
+          }}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmDialog
+          open
+          title={confirm.title}
+          body={confirm.body}
+          confirmLabel={confirm.confirmLabel}
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            await confirm.onConfirm();
+            setConfirm(null);
+          }}
+        />
+      )}
+
+      {shareNoteId && (
+        <ShareDialog
+          open
+          noteId={shareNoteId}
+          note={notes.find((n) => n.id === shareNoteId)}
+          currentUserId={user.uid}
+          canManage={notes.find((n) => n.id === shareNoteId)?.userId === user.uid}
+          onAdd={addCollaboratorByEmail}
+          onRemove={(noteId, uid) =>
+            updateDoc(doc(db, "notes", noteId), {
+              collaborators: (notes.find((n) => n.id === noteId)?.collaborators || []).filter(
+                (c) => c !== uid
+              ),
+            })
           }
-    }
+          onClose={() => setShareNoteId(null)}
+        />
+      )}
+    </Box>
+  );
+};
 
-    // const handleSubmit = async (e) => {
-    //     e.preventDefault();
-
-    //     if (editingNote) {
-    //         // Update existing note
-    //         const noteRef = doc(db, "notes", editingNote.id);
-    //         await updateDoc(noteRef, { title, content, updatedAt: Timestamp.fromDate(new Date()) });
-    //         setEditingNote(null);
-    //     } else {
-    //         // Create new note
-    //         const newNote = {
-    //             title,
-    //             content,
-    //             createdAt: Timestamp.fromDate(new Date()),
-    //             updatedAt: Timestamp.fromDate(new Date()),
-    //             userId: user.uid,
-    //             collaborators: []
-    //         };
-    //         const notesCollection = collection(db, "notes");
-    //         await addDoc(notesCollection, newNote);
-    //     }
-    //     setTitle("");
-    //     setContent("");
-    //     fetchNotes();
-    // };
-
-    const handleDialogSubmit = async () => {
-        if (dialogType === "folder") {
-            await handleCreateFolder(newName);
-        } else if (dialogType === "file") {
-            await handleCreateNote(newName);
-        } else {
-            setCollaboratorEmail(newName);
-            await handleAddCollaborator(selectedNoteId, newName);
-        }
-        closeDialog();
-    };
-    
-    // const handleEdit = (note) => {
-    //     setTitle(note.title);
-    //     setContent(note.content);
-    //     setEditingNote(note);
-    // }
-
-    const handleDelete = async (noteId) => {
-        try {
-            const noteRef = doc(db, "notes", noteId);
-            await deleteDoc(noteRef);
-            setNotes(notes.filter(note => note.id !== noteId)); // Update page for deletion of note
-        } catch (error) {
-            console.error("Error deleting note: ", noteId);
-        }
-    };
-
-    const handleAddCollaborator = async (noteId, email) => {
-        console.log("col ema", email)
-        
-        const data = await getUserUidByEmail(email);
-        const collaboratorUid = String(data.uid);
-
-        console.log("collab uid: ", collaboratorUid);
-        console.log("note id: ", noteId);
-
-        if (!collaboratorUid) {
-            console.error("User not found.")
-            return;
-        }
-
-        try {
-            await updateDoc(doc(db, "notes", noteId), {
-                collaborators: arrayUnion(collaboratorUid),
-            });
-            setCollaboratorEmail("");
-            console.log("Collaborator added.")
-        } catch (error) {
-            console.error("Error adding user as collaborator: ", error)
-        }
-    }
-
-    
-
-    const handleChange = (e) => {
-        setText(e.target.value);
-        //updateNote(e.target.value);
-    }
-
-    // const updateNote = useCallback(
-    //     _.debounce(async (noteId, newText) => {
-    //         if (!noteId) {
-    //             console.error("noteId is undefined");
-    //             return;
-    //         }
-    //         const noteRef = doc(db, "notes", noteId);
-    //         await updateDoc(noteRef, { content: newText });
-    //     }, 300),
-    //     []
-    // );
-
-    // Helper functions
-
-    const getUserUidByEmail = async (email) => {
-        console.log("Sending email:", email); 
-        
-        try {
-            const response = await fetch("http://localhost:3001/get-uid", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ email }),
-            });
-
-            const data = await response.json();
-            return data;
-        } catch (error) {
-            console.error("Error fetching UID: ", error);
-        }
-
-    }
-
-    async function fetchUserNotes(userId) {
-        console.log("Fetching user notes");
-        const notesRef = collection(db, "notes");
-
-        const sharedQuery = query(notesRef,
-            where("collaborators", "array-contains-any", [user.uid])
-        );
-
-        const ownedQuery = query(notesRef, where("userId", "==", user.uid));
-
-        const [ownedSnap, collabSnap] = await Promise.all([
-            getDocs(ownedQuery),
-            getDocs(sharedQuery),
-        ]);
-
-        const allNotes = [
-            ...ownedSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
-            ...collabSnap.docs
-            .filter(doc => doc.data().userId !== userId) // prevent duplicate if you're also in collaborators
-            .map(doc => ({ id: doc.id, ...doc.data() }))
-        ];
-
-        console.log(allNotes);
-        setNotes(allNotes);
-        console.log(notes);
-        setSharedNotes(collabSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    }
-
-    useEffect( () => {
-
-        if (!user) return;
-
-        // Fetch folders
-        const foldersRef = collection(db, "folders");
-        const foldersQuery = query(foldersRef, where("createdBy", "==", user.uid));
-        const unsubscribeFolders = onSnapshot(foldersQuery, (snapshot) => {
-            const folderData = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data(),
-            }));
-            setFolders(folderData);
-
-            setOpenFolders((prev) => {
-                const updated = { ...prev };
-                folderData.forEach(folder => {
-                    if (!(folder.id in updated)) {
-                        updated[folder.id] = true;
-                    }
-                });
-                return updated;
-            });
-        });
-
-        // // Fetch notes
-        // const notesRef = collection(db, "notes");
-        // const notesQuery = query(notesRef, where("userId", "==", user.uid));
-        // const unsubscribeNotes = onSnapshot(notesQuery, (snapshot) => {
-        //     const noteData = snapshot.docs.map((doc) => ({
-        //         id: doc.id,
-        //         ...doc.data(),
-        //     }));
-        //     setNotes(noteData);
-        // });
-
-        fetchUserNotes();
-
-        return () => {
-            unsubscribeFolders();
-            //unsubscribeNotes();
-        };
-
-    }, [user]);
-
-
-    // return (
-    //     <div>
-    //         <form onSubmit={handleSubmit}>
-    //             <input
-    //                 type="text"
-    //                 placeholder="Title"
-    //                 value={title}
-    //                 onChange={(e) => setTitle(e.target.value)}
-    //                 required
-    //             />
-    //             <textarea
-    //                 placeholder="Content"
-    //                 value={content}
-    //                 onChange={(e) => setContent(e.target.value)}
-    //                 required
-    //             ></textarea>
-    //             { editingNote &&
-    //                 <div>
-    //                     <input
-    //                         type="email"
-    //                         placeholder="Enter collaborator's email"
-    //                         value={collaboratorEmail}
-    //                         onChange={(e) => setCollaboratorEmail(e.target.value)}
-    //                     />
-    //                     <button type="button" onClick={() => handleAddCollaborator(editingNote?.id)}>Add Collaborator</button>
-    //                 </div>
-    //             }
-    //             <button type="submit">{editingNote ? "Update Note" : "Create Note"}</button>
-    //         </form>
-
-    //         <h2>Your Notes:</h2>
-    //         {notes.length === 0 ? (
-    //             <p>No notes found. Create one to get started!</p>
-    //         ) : (
-    //             <ul>
-    //                 {notes.map((note) => (
-    //                     <li key={note.id}>
-    //                         <h3>{note.title}</h3>
-    //                         <p>{note.content}</p>
-    //                         <button onClick={() => handleEdit(note)}>Edit</button>
-    //                         {note.userId === user.uid && (
-    //                             <button onClick={() => handleDelete(note.id)}>Delete</button>
-    //                         )}
-    //                     </li>
-    //                 ))}
-    //             </ul>
-    //         )}
-    //     </div>
-    // );
-
-    return (
-        <Box sx={{ display: 'flex', height: '100vh' }}>
-          {/* Sidebar */}
-          <Box sx={{ width: '300px', bgcolor: 'background.paper', color: 'text.primary', p: 2, borderRight: `1px solid ${theme.palette.divider}` }}>
-            <Typography variant="h6" gutterBottom>Folders</Typography>
-            <List>
-                {folders.map(folder => {
-                    const isOpen = openFolders[folder.id]; // open by default
-                    return (
-                        <Box key={folder.id}>
-                            <ListItem button onClick={() => {
-                                toggleFolder(folder.id);
-                                setSelectedFolderId(folder.id);
-                            }}>
-                                <ListItemIcon><Folder /></ListItemIcon>
-                                <ListItemText primary={folder.name} />
-                                {isOpen ? <ExpandLess /> : <ExpandMore />}
-                            </ListItem>
-                            <Collapse in={isOpen} timeout="auto" unmountOnExit>
-                            {
-                            notes
-                                .filter((note) => note.folderId === folder.id)
-                                .map((note) => (
-                                <ListItem
-                                    button
-                                    key={note.id}
-                                    onClick={() => handleNoteClick(note)}
-                                    sx={{
-                                    pl: 6,
-                                    backgroundColor:
-                                        selectedNoteId === note.id ? "rgba(0, 0, 0, 0.1)" : "transparent"
-                                    }}
-                                >
-                                    <ListItemText primary={note.title || note.name} />
-                                </ListItem>
-                            ))} 
-                            </Collapse>
-                        </Box>
-                    );
-                })}
-                <h2>Shared with Me</h2>
-                {Array.isArray(sharedNotes) ? sharedNotes.map(note => <ListItem
-                                    button
-                                    key={note.id}
-                                    onClick={() => handleNoteClick(note)}
-                                    sx={{
-                                    pl: 6,
-                                    backgroundColor:
-                                        selectedNoteId === note.id ? "rgba(0, 0, 0, 0.1)" : "transparent"
-                                    }}
-                                >
-                                    <ListItemText primary={note.title || note.name} />
-                                </ListItem>) : "ahaha"}
-            </List>
-            <Divider sx={{ my: 2 }} />
-            <Button variant="outlined" fullWidth onClick={() => openDialog("folder")}>
-                Create Folder
-            </Button>
-            <Button variant="outlined" fullWidth sx={{ mt: 1 }} onClick={() => openDialog("file")}>
-                Create File
-            </Button>
-            <Button variant="outlined" fullWidth sx={{ mt: 1 }} onClick={() => openDialog("collab")}>
-                Add Collaborator
-            </Button>
-          </Box>
-    
-          {/* Main Content Area */}
-          <Box sx={{ flexGrow: 1, p: 4 }}>
-            {selectedNoteId ? (
-              <>
-                {/* <Typography variant="h5">{selectedNoteId.title}</Typography> */}
-                {/* <Editor noteId={selectedNoteId}/> */}
-                <Tiptap noteId={selectedNoteId} userId={user.uid} />
-              </>
-            ) : (
-              <Typography variant="h6">Select a file to begin</Typography>
-            )}
-          </Box>
-          <Dialog open={isDialogOpen} onClose={closeDialog}>
-            <DialogTitle>
-                {dialogTitle}
-                <IconButton
-                aria-label="close"
-                onClick={closeDialog}
-                sx={{ position: 'absolute', right: 8, top: 8 }}
-                >
-                <Close />
-                </IconButton>
-            </DialogTitle>
-            <DialogContent>
-                <TextField
-                autoFocus
-                margin="dense"
-                label={dialogTextField}
-                type="text"
-                fullWidth
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                />
-            </DialogContent>
-            <DialogActions>
-                <Button onClick={closeDialog}>Cancel</Button>
-                {dialogType !== "collab" ? <Button onClick={handleDialogSubmit} disabled={!newName.trim()}>
-                Create
-                </Button> :
-                <Button onClick={handleDialogSubmit}>Invite</Button>
-                }
-                
-            </DialogActions>
-            </Dialog>
-        </Box>
-        
-      );
+function EmptyState({ onNewNote, hasNotes }) {
+  return (
+    <Box
+      sx={{
+        flex: 1,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 2,
+        px: 3,
+        textAlign: "center",
+      }}
+    >
+      <Typography variant="h5" sx={{ fontWeight: 600 }}>
+        {hasNotes ? "Select a note" : "Nothing here yet"}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 340 }}>
+        {hasNotes
+          ? "Pick a note from the sidebar, or start a new one."
+          : "Create your first note to start writing and collaborating."}
+      </Typography>
+      <Button variant="contained" onClick={onNewNote}>
+        New note
+      </Button>
+    </Box>
+  );
 }
 
 export default Notes;

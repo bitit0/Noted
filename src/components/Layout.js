@@ -1,39 +1,23 @@
 import React from "react";
 import { Outlet } from "react-router-dom";
+import { Box } from "@mui/material";
 import NotesNavbar from "./NotesNavbar";
-import { createTheme, ThemeProvider, CssBaseline } from "@mui/material";
-import { useMemo, useState, useEffect } from "react";
-import { useEditorTheme } from "../ThemeContext"
-
-const getInitialMode = () => {
-  return localStorage.getItem("colorMode") || "light";
-};
 
 const Layout = () => {
-
-  const [mode, setMode] = useState(getInitialMode);
-  const { editorTheme } = useEditorTheme();
-
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: editorTheme,
-        },
-      }),
-    [editorTheme]
-  );
-
   return (
-    <>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <NotesNavbar />
-        <main>
-          <Outlet />
-        </main>
-      </ThemeProvider>
-    </>
+    <Box
+      sx={{
+        height: "100vh",
+        display: "flex",
+        flexDirection: "column",
+        bgcolor: "background.default",
+      }}
+    >
+      <NotesNavbar />
+      <Box component="main" sx={{ flex: 1, minHeight: 0, overflow: "hidden" }}>
+        <Outlet />
+      </Box>
+    </Box>
   );
 };
 
