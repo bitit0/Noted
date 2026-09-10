@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
 import { doc, getDoc, onSnapshot, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebaseConfig";
+import { u8ToB64, b64ToU8 } from "../utils/base64";
 
 // Origins used to tag Yjs transactions so we don't echo remote/initial state
 // back to the network.
@@ -11,22 +12,6 @@ const INIT_ORIGIN = "firestore-init";
 
 const WS_URL = process.env.REACT_APP_COLLAB_WS_URL || "";
 const SAVE_DEBOUNCE_MS = 700;
-
-// --- base64 <-> Uint8Array (Yjs updates are binary) ---
-function u8ToB64(u8) {
-  let s = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < u8.length; i += chunk) {
-    s += String.fromCharCode.apply(null, u8.subarray(i, i + chunk));
-  }
-  return btoa(s);
-}
-function b64ToU8(b64) {
-  const bin = atob(b64);
-  const u8 = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) u8[i] = bin.charCodeAt(i);
-  return u8;
-}
 
 /**
  * Manages a Yjs document for a single note, synchronized through Firestore.
