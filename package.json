@@ -3,16 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "@ckeditor/ckeditor5-build-classic": "^41.4.2",
-    "@ckeditor/ckeditor5-react": "^9.5.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@floating-ui/react": "^0.27.12",
-    "@fontsource/roboto": "^5.2.5",
-    "@lexical/react": "^0.31.1",
+    "@fontsource/inter": "^5.3.0",
+    "@fontsource/space-grotesk": "^5.3.0",
     "@mui/icons-material": "^6.4.8",
     "@mui/material": "^6.4.8",
-    "@tailwindcss/postcss": "^4.0.16",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -23,6 +20,7 @@
     "@tiptap/extension-highlight": "^2.14.0",
     "@tiptap/extension-image": "^2.14.0",
     "@tiptap/extension-link": "^2.14.0",
+    "@tiptap/extension-placeholder": "^2.27.2",
     "@tiptap/extension-subscript": "^2.14.0",
     "@tiptap/extension-superscript": "^2.14.0",
     "@tiptap/extension-task-item": "^2.14.0",
@@ -34,15 +32,9 @@
     "@tiptap/react": "^2.14.0",
     "@tiptap/starter-kit": "^2.14.0",
     "@y/websocket-server": "^0.1.1",
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
     "firebase": "^11.5.0",
-    "firebase-admin": "^13.2.0",
     "html2canvas": "^1.4.1",
-    "init": "^0.1.2",
     "jspdf": "^3.0.1",
-    "lexical": "^0.31.1",
-    "lodash": "^4.17.21",
     "lucide-react": "^0.511.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -55,11 +47,11 @@
     "yjs": "^13.6.27"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "react-scripts test",
-    "eject": "react-scripts eject",
-    "collab-server": "y-websocket"
+    "collab-server": "y-websocket-server"
   },
   "eslintConfig": {
     "extends": [
@@ -80,10 +72,10 @@
     ]
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^4.7.0",
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.3",
     "postcss-cli": "^11.0.1",
-    "sass": "^1.89.1",
-    "tailwindcss": "^4.0.16"
+    "sass": "^1.89.1"
   }
 }

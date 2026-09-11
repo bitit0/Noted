@@ -1,30 +1,28 @@
-// Import the functions you need from the SDKs you need
+// Firebase initialization.
+// The web config below is *public* by design (it identifies the project to the
+// client SDK; it is not a secret). Values can be overridden via environment
+// variables so the same build can target different Firebase projects.
 import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
 import { getFirestore } from "firebase/firestore";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getStorage } from "firebase/storage";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const env = import.meta.env;
+
 const firebaseConfig = {
-  apiKey: "AIzaSyAUQIjQo4wVFt7FM3KRAtoyuUHQY5zL5_E",
-  authDomain: "noted-11d5b.firebaseapp.com",
-  projectId: "noted-11d5b",
-  storageBucket: "noted-11d5b.firebasestorage.app",
-  messagingSenderId: "539076609248",
-  appId: "1:539076609248:web:52e2ac5299087679c0bc85",
-  measurementId: "G-Q4D11WFZZ4"
+  apiKey: env.REACT_APP_FIREBASE_API_KEY || "AIzaSyAUQIjQo4wVFt7FM3KRAtoyuUHQY5zL5_E",
+  authDomain: env.REACT_APP_FIREBASE_AUTH_DOMAIN || "noted-11d5b.firebaseapp.com",
+  projectId: env.REACT_APP_FIREBASE_PROJECT_ID || "noted-11d5b",
+  storageBucket: env.REACT_APP_FIREBASE_STORAGE_BUCKET || "noted-11d5b.firebasestorage.app",
+  messagingSenderId: env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID || "539076609248",
+  appId: env.REACT_APP_FIREBASE_APP_ID || "1:539076609248:web:52e2ac5299087679c0bc85",
+  measurementId: env.REACT_APP_FIREBASE_MEASUREMENT_ID || "G-Q4D11WFZZ4",
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
 const db = getFirestore(app);
 const auth = getAuth(app);
 const googleProvider = new GoogleAuthProvider();
 const storage = getStorage(app);
 
-export { db, auth, googleProvider, storage };
+export { app, db, auth, googleProvider, storage };
