@@ -1,4 +1,4 @@
-import React, { lazy } from "react";
+import React, { lazy, Suspense } from "react";
 import { BrowserRouter as Router, Route, Routes, Navigate } from "react-router-dom";
 import { Box, CircularProgress } from "@mui/material";
 import { useAuth } from "./context/AuthContext";
@@ -8,6 +8,7 @@ import Layout from "./components/Layout";
 // Code-split the authenticated, editor-heavy screens off the initial bundle.
 const Notes = lazy(() => import("./Notes"));
 const Profile = lazy(() => import("./components/Profile.tsx"));
+const PublicNote = lazy(() => import("./components/PublicNote"));
 
 function FullPageLoader() {
   return (
@@ -32,21 +33,25 @@ function App() {
 
   return (
     <Router>
-      <Routes>
-        {user ? (
-          <Route path="/" element={<Layout />}>
-            <Route index element={<Notes />} />
-            <Route path="notes" element={<Notes />} />
-            <Route path="profile" element={<Profile />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Route>
-        ) : (
-          <>
-            <Route path="/" element={<Home />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </>
-        )}
-      </Routes>
+      <Suspense fallback={<FullPageLoader />}>
+        <Routes>
+          {/* Public, auth-free read-only view of a published note. */}
+          <Route path="/share/:token" element={<PublicNote />} />
+          {user ? (
+            <Route path="/" element={<Layout />}>
+              <Route index element={<Notes />} />
+              <Route path="notes" element={<Notes />} />
+              <Route path="profile" element={<Profile />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Route>
+          ) : (
+            <>
+              <Route path="/" element={<Home />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </>
+          )}
+        </Routes>
+      </Suspense>
     </Router>
   );
 }

@@ -4,7 +4,9 @@ import {
   doc,
   addDoc,
   updateDoc,
+  setDoc,
   deleteDoc,
+  deleteField,
   onSnapshot,
   collection,
   query,
@@ -236,6 +238,38 @@ const Notes = () => {
     [user]
   );
 
+  // Publish a point-in-time, read-only copy to a public link (idempotent:
+  // publishing an already-public note refreshes the copy with current content).
+  const publishNote = useCallback(
+    async (noteId) => {
+      const note = notes.find((n) => n.id === noteId);
+      if (!note) return null;
+      const token = note.publicToken || crypto.randomUUID();
+      await setDoc(doc(db, "publicShares", token), {
+        noteId,
+        ownerId: user.uid,
+        title: note.title || "Untitled",
+        ydocState: note.ydocState || null,
+        updatedAt: serverTimestamp(),
+      });
+      if (!note.publicToken) {
+        await updateDoc(doc(db, "notes", noteId), { publicToken: token });
+      }
+      return token;
+    },
+    [notes, user]
+  );
+
+  const unpublishNote = useCallback(
+    async (noteId) => {
+      const note = notes.find((n) => n.id === noteId);
+      if (!note?.publicToken) return;
+      await deleteDoc(doc(db, "publicShares", note.publicToken));
+      await updateDoc(doc(db, "notes", noteId), { publicToken: deleteField() });
+    },
+    [notes]
+  );
+
   // ---- Dialog openers ----
   const openNewNote = (folderId = null) =>
     setPrompt({
@@ -434,6 +468,15 @@ const Notes = () => {
               viewers: arrayRemove(uid),
             });
             notify("Access removed");
+          }}
+          onPublish={async (noteId) => {
+            const token = await publishNote(noteId);
+            notify("Public link ready");
+            return token;
+          }}
+          onUnpublish={async (noteId) => {
+            await unpublishNote(noteId);
+            notify("Public link removed");
           }}
           onClose={() => setShareNoteId(null)}
         />

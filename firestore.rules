@@ -66,5 +66,16 @@ service cloud.firestore {
 
       allow delete: if isNoteOwner();
     }
+
+    // ---- Public share mirrors ----
+    // A point-in-time, read-only copy of a note published to a public link.
+    // Anyone (signed in or not) may read it; only the owner who created it may
+    // write or remove it.
+    match /publicShares/{token} {
+      allow read: if true;
+      allow create, update: if signedIn()
+                            && request.auth.uid == request.resource.data.ownerId;
+      allow delete: if signedIn() && request.auth.uid == resource.data.ownerId;
+    }
   }
 }

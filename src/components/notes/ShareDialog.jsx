@@ -25,12 +25,16 @@ export default function ShareDialog({
   canManage,
   onAdd,
   onRemove,
+  onPublish,
+  onUnpublish,
   onClose,
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyPublic, setBusyPublic] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [people, setPeople] = useState([]);
   const [loadingPeople, setLoadingPeople] = useState(true);
 
@@ -73,6 +77,30 @@ export default function ShareDialog({
       setError(err.message || "Could not add collaborator.");
     } finally {
       setBusy(false);
+    }
+  };
+
+  const publicToken = note?.publicToken;
+  const publicUrl = publicToken ? `${window.location.origin}/share/${publicToken}` : "";
+
+  const runPublic = async (fn) => {
+    setBusyPublic(true);
+    try {
+      await fn();
+    } catch (err) {
+      setError(err.message || "Could not update the public link.");
+    } finally {
+      setBusyPublic(false);
+    }
+  };
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(publicUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* clipboard blocked — the link is visible to copy manually */
     }
   };
 
@@ -171,6 +199,61 @@ export default function ShareDialog({
                 </Box>
               );
             })}
+          </Box>
+        )}
+
+        {canManage && (
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="overline" sx={{ color: "text.secondary" }}>
+              Public link
+            </Typography>
+            {publicToken ? (
+              <Box sx={{ mt: 1 }}>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                  <TextField
+                    size="small"
+                    fullWidth
+                    value={publicUrl}
+                    InputProps={{ readOnly: true }}
+                    onFocus={(e) => e.target.select()}
+                  />
+                  <Button variant="outlined" onClick={copyLink}>
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                  Anyone with this link can view (read only). Shows the content as
+                  of the last update.
+                </Typography>
+                <Box sx={{ display: "flex", gap: 1, mt: 1 }}>
+                  <Button
+                    size="small"
+                    disabled={busyPublic}
+                    onClick={() => runPublic(() => onPublish(noteId))}
+                  >
+                    Update
+                  </Button>
+                  <Button
+                    size="small"
+                    color="error"
+                    disabled={busyPublic}
+                    onClick={() => runPublic(() => onUnpublish(noteId))}
+                  >
+                    Unpublish
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <Box sx={{ mt: 1 }}>
+                <Button
+                  variant="outlined"
+                  disabled={busyPublic}
+                  onClick={() => runPublic(() => onPublish(noteId))}
+                >
+                  Create public link
+                </Button>
+              </Box>
+            )}
           </Box>
         )}
       </DialogContent>
