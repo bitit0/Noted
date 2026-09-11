@@ -181,7 +181,7 @@ function SaveStatus({ dirty }) {
   );
 }
 
-export function SimpleEditor({ noteId, userId, username }) {
+export function SimpleEditor({ noteId, userId, username, editable = true }) {
   const isMobile = useMobile();
   const windowSize = useWindowSize();
   const [mobileView, setMobileView] = useState("main");
@@ -232,6 +232,7 @@ export function SimpleEditor({ noteId, userId, username }) {
   const editor = useEditor(
     {
       immediatelyRender: false,
+      editable,
       editorProps: {
         attributes: {
           autocomplete: "off",
@@ -286,7 +287,7 @@ export function SimpleEditor({ noteId, userId, username }) {
         }, TITLE_SAVE_MS);
       },
     },
-    [ydoc, provider]
+    [ydoc, provider, editable]
   );
 
   const bodyRect = useCursorVisibility({
@@ -329,23 +330,25 @@ export function SimpleEditor({ noteId, userId, username }) {
   return (
     <EditorContext.Provider value={{ editor }}>
       <div className="editor-shell">
-        <Toolbar
-          ref={toolbarRef}
-          style={isMobile ? { bottom: `calc(100% - ${windowSize.height - bodyRect.y}px)` } : {}}
-        >
-          {mobileView === "main" ? (
-            <MainToolbarContent
-              onHighlighterClick={() => setMobileView("highlighter")}
-              onLinkClick={() => setMobileView("link")}
-              isMobile={isMobile}
-            />
-          ) : (
-            <MobileToolbarContent
-              type={mobileView === "highlighter" ? "highlighter" : "link"}
-              onBack={() => setMobileView("main")}
-            />
-          )}
-        </Toolbar>
+        {editable && (
+          <Toolbar
+            ref={toolbarRef}
+            style={isMobile ? { bottom: `calc(100% - ${windowSize.height - bodyRect.y}px)` } : {}}
+          >
+            {mobileView === "main" ? (
+              <MainToolbarContent
+                onHighlighterClick={() => setMobileView("highlighter")}
+                onLinkClick={() => setMobileView("link")}
+                isMobile={isMobile}
+              />
+            ) : (
+              <MobileToolbarContent
+                type={mobileView === "highlighter" ? "highlighter" : "link"}
+                onBack={() => setMobileView("main")}
+              />
+            )}
+          </Toolbar>
+        )}
 
         <div className="editor-meta-bar">
           <div className="editor-meta-left">
@@ -386,6 +389,7 @@ export function SimpleEditor({ noteId, userId, username }) {
               onChange={(e) => handleTitleChange(e.target.value)}
               placeholder="Untitled"
               spellCheck="false"
+              readOnly={!editable}
             />
             <EditorContent editor={editor} role="presentation" className="simple-editor-content" />
           </div>

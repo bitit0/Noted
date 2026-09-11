@@ -3,7 +3,7 @@ import { SimpleEditor } from "../../TiptapFiles/components/tiptap-templates/simp
 import { getUserProfile } from "../utils/getUserProfile";
 import { useAuth } from "../../context/AuthContext";
 
-const Tiptap = ({ noteId, userId }) => {
+const Tiptap = ({ noteId, userId, editable = true }) => {
   const { user } = useAuth();
   const [username, setUsername] = useState(null);
 
@@ -22,7 +22,15 @@ const Tiptap = ({ noteId, userId }) => {
   if (!username || !noteId) return <div className="editor-loading">Loading…</div>;
 
   // key forces a fresh editor + collaboration doc whenever the note changes.
-  return <SimpleEditor key={noteId} noteId={noteId} userId={userId} username={username} />;
+  return (
+    <SimpleEditor
+      key={noteId}
+      noteId={noteId}
+      userId={userId}
+      username={username}
+      editable={editable}
+    />
+  );
 };
 
 export default Tiptap;

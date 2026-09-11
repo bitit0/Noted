@@ -6,6 +6,7 @@ import {
   DialogActions,
   Button,
   TextField,
+  MenuItem,
   Box,
   Typography,
   Avatar,
@@ -27,19 +28,29 @@ export default function ShareDialog({
   onClose,
 }) {
   const [email, setEmail] = useState("");
+  const [role, setRole] = useState("editor");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [people, setPeople] = useState([]);
   const [loadingPeople, setLoadingPeople] = useState(true);
 
   const collaborators = note?.collaborators || [];
+  const viewers = note?.viewers || [];
   const ownerId = note?.userId;
 
   useEffect(() => {
     let active = true;
     setLoadingPeople(true);
-    const ids = [ownerId, ...collaborators].filter(Boolean);
-    Promise.all(ids.map((uid) => getUserProfile(uid).then((p) => ({ uid, ...(p || {}) }))))
+    const ids = [
+      ...(ownerId ? [{ uid: ownerId, role: "owner" }] : []),
+      ...collaborators.map((uid) => ({ uid, role: "editor" })),
+      ...viewers.map((uid) => ({ uid, role: "viewer" })),
+    ];
+    Promise.all(
+      ids.map(({ uid, role: r }) =>
+        getUserProfile(uid).then((p) => ({ uid, role: r, ...(p || {}) }))
+      )
+    )
       .then((res) => {
         if (active) setPeople(res);
       })
@@ -48,7 +59,7 @@ export default function ShareDialog({
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ownerId, collaborators.join(",")]);
+  }, [ownerId, collaborators.join(","), viewers.join(",")]);
 
   const handleAdd = async (e) => {
     e.preventDefault();
@@ -56,7 +67,7 @@ export default function ShareDialog({
     if (!email.trim()) return;
     setBusy(true);
     try {
-      await onAdd(noteId, email);
+      await onAdd(noteId, email, role);
       setEmail("");
     } catch (err) {
       setError(err.message || "Could not add collaborator.");
@@ -83,6 +94,16 @@ export default function ShareDialog({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
+            <TextField
+              size="small"
+              select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              sx={{ minWidth: 104 }}
+            >
+              <MenuItem value="editor">Editor</MenuItem>
+              <MenuItem value="viewer">Viewer</MenuItem>
+            </TextField>
             <Button type="submit" variant="contained" disabled={busy || !email.trim()}>
               Invite
             </Button>
@@ -110,7 +131,9 @@ export default function ShareDialog({
         ) : (
           <Box sx={{ mt: 1, display: "flex", flexDirection: "column", gap: 0.5 }}>
             {people.map((p) => {
-              const isOwner = p.uid === ownerId;
+              const isOwner = p.role === "owner";
+              const roleLabel =
+                p.role === "owner" ? "Owner" : p.role === "viewer" ? "Viewer" : "Editor";
               return (
                 <Box
                   key={p.uid}
@@ -136,7 +159,8 @@ export default function ShareDialog({
                       {p.uid === currentUserId ? " (you)" : ""}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" noWrap component="div">
-                      {isOwner ? "Owner" : p.email || "Collaborator"}
+                      {roleLabel}
+                      {p.email ? ` · ${p.email}` : ""}
                     </Typography>
                   </Box>
                   {canManage && !isOwner && (

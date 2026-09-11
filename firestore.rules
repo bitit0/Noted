@@ -4,8 +4,9 @@ rules_version = '2';
 // Data model:
 //   users/{uid}     : { uid, email, emailLower, firstName, lastName, displayName, photoURL, createdAt }
 //   folders/{id}    : { name, parentId, createdBy, createdAt }
-//   notes/{id}      : { title, userId (owner), collaborators: [uid], folderId,
-//                       ydocState, snapshot, createdAt, updatedAt }
+//   notes/{id}      : { title, userId (owner), collaborators: [uid] (editors),
+//                       viewers: [uid] (read-only), folderId, ydocState,
+//                       snapshot, deletedAt, createdAt, updatedAt }
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -44,15 +45,21 @@ service cloud.firestore {
              && resource.data.collaborators is list
              && request.auth.uid in resource.data.collaborators;
     }
+    // Viewers have read-only access.
+    function isViewer() {
+      return signedIn()
+             && resource.data.viewers is list
+             && request.auth.uid in resource.data.viewers;
+    }
 
     match /notes/{noteId} {
-      allow read: if isNoteOwner() || isCollaborator();
+      allow read: if isNoteOwner() || isCollaborator() || isViewer();
 
       allow create: if signedIn()
                     && request.auth.uid == request.resource.data.userId;
 
-      // Owner has full control. Collaborators may edit content but may not
-      // take ownership away from the owner.
+      // Owner has full control. Collaborators (editors) may edit content but may
+      // not take ownership away from the owner. Viewers get no write access.
       allow update: if isNoteOwner()
                     || (isCollaborator()
                         && request.resource.data.userId == resource.data.userId);

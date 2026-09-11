@@ -12,6 +12,7 @@ import {
   getDocs,
   serverTimestamp,
   arrayUnion,
+  arrayRemove,
 } from "firebase/firestore";
 import { useAuth } from "./context/AuthContext";
 import {
@@ -61,13 +62,19 @@ const Notes = () => {
       (err) => console.error("[notes] folders listener:", err)
     );
 
+    // A note reaches this user as owner, editor (collaborators), or viewer.
+    // Owner wins over editor wins over viewer when a doc matches more than once.
     let owned = [];
-    let shared = [];
+    let editing = [];
+    let viewing = [];
     const merge = () => {
       const byId = new Map();
-      owned.forEach((n) => byId.set(n.id, n));
-      shared.forEach((n) => {
-        if (!byId.has(n.id)) byId.set(n.id, n);
+      owned.forEach((n) => byId.set(n.id, { ...n, role: "owner" }));
+      editing.forEach((n) => {
+        if (!byId.has(n.id)) byId.set(n.id, { ...n, shared: true, role: "editor" });
+      });
+      viewing.forEach((n) => {
+        if (!byId.has(n.id)) byId.set(n.id, { ...n, shared: true, role: "viewer" });
       });
       setNotes(Array.from(byId.values()));
     };
@@ -81,19 +88,29 @@ const Notes = () => {
       (err) => console.error("[notes] owned listener:", err)
     );
 
-    const unsubShared = onSnapshot(
+    const unsubEditing = onSnapshot(
       query(collection(db, "notes"), where("collaborators", "array-contains", user.uid)),
       (snap) => {
-        shared = snap.docs.map((d) => ({ id: d.id, ...d.data(), shared: true }));
+        editing = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
         merge();
       },
-      (err) => console.error("[notes] shared listener:", err)
+      (err) => console.error("[notes] editor listener:", err)
+    );
+
+    const unsubViewing = onSnapshot(
+      query(collection(db, "notes"), where("viewers", "array-contains", user.uid)),
+      (snap) => {
+        viewing = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        merge();
+      },
+      (err) => console.error("[notes] viewer listener:", err)
     );
 
     return () => {
       unsubFolders();
       unsubOwned();
-      unsubShared();
+      unsubEditing();
+      unsubViewing();
     };
   }, [user]);
 
@@ -202,13 +219,18 @@ const Notes = () => {
   }, []);
 
   const addCollaboratorByEmail = useCallback(
-    async (noteId, email) => {
+    async (noteId, email, role = "editor") => {
       const found = await findUserByEmail(email);
       if (!found) throw new Error("No Noted user found with that email.");
       if (found.uid === user.uid) throw new Error("That's you — you already own this note.");
-      await updateDoc(doc(db, "notes", noteId), {
-        collaborators: arrayUnion(found.uid),
-      });
+      // A person holds exactly one role: adding to one list clears the other.
+      const noteRef = doc(db, "notes", noteId);
+      await updateDoc(
+        noteRef,
+        role === "viewer"
+          ? { viewers: arrayUnion(found.uid), collaborators: arrayRemove(found.uid) }
+          : { collaborators: arrayUnion(found.uid), viewers: arrayRemove(found.uid) }
+      );
       return found;
     },
     [user]
@@ -319,7 +341,11 @@ const Notes = () => {
                     </IconButton>
                   )}
                   <Typography variant="caption" color="text.secondary" noWrap>
-                    {selectedNote.shared ? "Shared with you" : "Your note"}
+                    {selectedNote.role === "viewer"
+                      ? "Shared with you · View only"
+                      : selectedNote.shared
+                      ? "Shared with you"
+                      : "Your note"}
                     {selectedNote.collaborators?.length
                       ? ` · ${selectedNote.collaborators.length} collaborator${
                           selectedNote.collaborators.length > 1 ? "s" : ""
@@ -343,7 +369,11 @@ const Notes = () => {
                 </Box>
               </Box>
               <Box sx={{ flex: 1, minHeight: 0 }}>
-                <Tiptap noteId={selectedNote.id} userId={user.uid} />
+                <Tiptap
+                  noteId={selectedNote.id}
+                  userId={user.uid}
+                  editable={selectedNote.role !== "viewer"}
+                />
               </Box>
             </>
           ) : (
@@ -393,16 +423,15 @@ const Notes = () => {
           note={notes.find((n) => n.id === shareNoteId)}
           currentUserId={user.uid}
           canManage={notes.find((n) => n.id === shareNoteId)?.userId === user.uid}
-          onAdd={async (noteId, email) => {
-            const found = await addCollaboratorByEmail(noteId, email);
+          onAdd={async (noteId, email, role) => {
+            const found = await addCollaboratorByEmail(noteId, email, role);
             notify(`Shared with ${found.displayName || found.email}`);
             return found;
           }}
           onRemove={async (noteId, uid) => {
             await updateDoc(doc(db, "notes", noteId), {
-              collaborators: (notes.find((n) => n.id === noteId)?.collaborators || []).filter(
-                (c) => c !== uid
-              ),
+              collaborators: arrayRemove(uid),
+              viewers: arrayRemove(uid),
             });
             notify("Access removed");
           }}
