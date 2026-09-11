@@ -80,8 +80,9 @@ import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../../../../firebaseConfig";
 import { useCollaborativeNote } from "../../../../hooks/useCollaborativeNote";
 import { exportNoteAsMarkdown } from "../../../../components/utils/exportNote";
+import VersionHistoryDialog from "../../../../components/notes/VersionHistoryDialog";
 import jsPDF from "jspdf";
-import { Download, Check, RefreshCw, Users } from "lucide-react";
+import { Download, Check, RefreshCw, Users, History } from "lucide-react";
 
 const TITLE_SAVE_MS = 600;
 
@@ -192,6 +193,7 @@ export function SimpleEditor({ noteId, userId, username, editable = true }) {
   const [title, setTitle] = useState("");
   const [dirty, setDirty] = useState(false);
   const [wordCount, setWordCount] = useState(0);
+  const [showHistory, setShowHistory] = useState(false);
   const titleTimer = useRef(null);
   const snapshotTimer = useRef(null);
   const uploader = useRef(createNoteImageUploader(noteId));
@@ -371,6 +373,13 @@ export function SimpleEditor({ noteId, userId, username, editable = true }) {
             <button
               type="button"
               className="editor-export-btn"
+              onClick={() => setShowHistory(true)}
+            >
+              <History size={14} /> History
+            </button>
+            <button
+              type="button"
+              className="editor-export-btn"
               onClick={() => exportNoteAsMarkdown(title || "untitled", editor.getText())}
             >
               <Download size={14} /> .md
@@ -399,6 +408,21 @@ export function SimpleEditor({ noteId, userId, username, editable = true }) {
           </div>
         </div>
       </div>
+
+      <VersionHistoryDialog
+        open={showHistory}
+        noteId={noteId}
+        canEdit={editable}
+        title={title}
+        userId={userId}
+        username={username}
+        getCurrentHtml={() => editor.getHTML()}
+        onRestore={(html) => {
+          editor.commands.setContent(html, true);
+          setDirty(true);
+        }}
+        onClose={() => setShowHistory(false)}
+      />
     </EditorContext.Provider>
   );
 }

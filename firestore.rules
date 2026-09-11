@@ -65,6 +65,29 @@ service cloud.firestore {
                         && request.resource.data.userId == resource.data.userId);
 
       allow delete: if isNoteOwner();
+
+      // ---- Saved versions (history snapshots) ----
+      // Access follows the parent note: anyone who can read the note can read
+      // its history; editors and the owner can save versions; only the owner
+      // can prune them.
+      function parentNote() {
+        return get(/databases/$(database)/documents/notes/$(noteId)).data;
+      }
+      match /versions/{versionId} {
+        allow read: if signedIn() && (
+          parentNote().userId == request.auth.uid
+          || (parentNote().collaborators is list
+              && request.auth.uid in parentNote().collaborators)
+          || (parentNote().viewers is list
+              && request.auth.uid in parentNote().viewers)
+        );
+        allow create: if signedIn() && (
+          parentNote().userId == request.auth.uid
+          || (parentNote().collaborators is list
+              && request.auth.uid in parentNote().collaborators)
+        );
+        allow delete: if signedIn() && parentNote().userId == request.auth.uid;
+      }
     }
 
     // ---- Public share mirrors ----
