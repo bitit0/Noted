@@ -26,13 +26,16 @@ function FullPageLoader() {
   );
 }
 
+// Base path the app is served under ("/" locally, "/Noted/" on GitHub Pages).
+const basename = import.meta.env.BASE_URL.replace(/\/+$/, "") || "/";
+
 function App() {
   const { user, loading } = useAuth();
 
   if (loading) return <FullPageLoader />;
 
   return (
-    <Router>
+    <Router basename={basename}>
       <Suspense fallback={<FullPageLoader />}>
         <Routes>
           {/* Public, auth-free read-only view of a published note. */}

@@ -81,7 +81,10 @@ export default function ShareDialog({
   };
 
   const publicToken = note?.publicToken;
-  const publicUrl = publicToken ? `${window.location.origin}/share/${publicToken}` : "";
+  // BASE_URL is "/" locally and "/Noted/" on GitHub Pages; it ends with a slash.
+  const publicUrl = publicToken
+    ? `${window.location.origin}${import.meta.env.BASE_URL}share/${publicToken}`
+    : "";
 
   const runPublic = async (fn) => {
     setBusyPublic(true);
