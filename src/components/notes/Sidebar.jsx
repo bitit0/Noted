@@ -25,6 +25,8 @@ import {
   Users,
   FolderInput,
   RotateCcw,
+  Pin,
+  PinOff,
 } from "lucide-react";
 import { relativeTime } from "../utils/relativeTime";
 
@@ -48,6 +50,7 @@ export default function Sidebar({
   onDeleteFolder,
   onShareNote,
   onMoveNote,
+  onTogglePin,
   fullWidth = false,
 }) {
   const [collapsed, setCollapsed] = useState({});
@@ -66,12 +69,17 @@ export default function Sidebar({
     (n.title || "").toLowerCase().includes(q) ||
     (n.snapshot || "").toLowerCase().includes(q);
 
+  // Pinned notes are lifted out of their normal section into a Pinned list.
   const owned = useMemo(
-    () => notes.filter((n) => !n.shared && !n.deletedAt),
+    () => notes.filter((n) => !n.shared && !n.deletedAt && !n.pinned),
     [notes]
   );
   const shared = useMemo(
-    () => notes.filter((n) => n.shared && !n.deletedAt),
+    () => notes.filter((n) => n.shared && !n.deletedAt && !n.pinned),
+    [notes]
+  );
+  const pinned = useMemo(
+    () => notes.filter((n) => n.pinned && !n.deletedAt),
     [notes]
   );
   const trashed = useMemo(
@@ -122,6 +130,7 @@ export default function Sidebar({
             {relativeTime(note.updatedAt) || "—"}
           </Typography>
         </Box>
+        {note.pinned && <Pin size={13} style={{ flexShrink: 0, opacity: 0.6 }} />}
         <IconButton
           className="note-actions"
           size="small"
@@ -223,6 +232,16 @@ export default function Sidebar({
           >
             No notes yet.
           </Typography>
+        )}
+
+        {/* Pinned */}
+        {pinned.filter(matches).length > 0 && (
+          <>
+            <SectionLabel>Pinned</SectionLabel>
+            {pinned
+              .filter(matches)
+              .map((n) => renderNoteRow(n, { canManage: !n.shared }))}
+          </>
         )}
 
         {/* Folders */}
@@ -374,6 +393,19 @@ export default function Sidebar({
           </ListItemIcon>
           Share
         </MenuItem>
+        {noteMenu?.canManage && (
+          <MenuItem
+            onClick={() => {
+              onTogglePin(noteMenu.note);
+              setNoteMenu(null);
+            }}
+          >
+            <ListItemIcon>
+              {noteMenu.note.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+            </ListItemIcon>
+            {noteMenu?.note?.pinned ? "Unpin" : "Pin"}
+          </MenuItem>
+        )}
         {noteMenu?.canManage && (
           <MenuItem
             onClick={(e) => {

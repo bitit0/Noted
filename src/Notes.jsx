@@ -220,6 +220,12 @@ const Notes = () => {
     return updateDoc(doc(db, "notes", noteId), { folderId: folderId || null });
   }, []);
 
+  // ponytail: pin is a note-level flag (owner-controlled); per-user pins would
+  // need a separate per-user structure — add that if pins-per-viewer matter.
+  const togglePin = useCallback((note) => {
+    return updateDoc(doc(db, "notes", note.id), { pinned: !note.pinned });
+  }, []);
+
   const addCollaboratorByEmail = useCallback(
     async (noteId, email, role = "editor") => {
       const found = await findUserByEmail(email);
@@ -347,6 +353,7 @@ const Notes = () => {
           onDeleteFolder={openDeleteFolder}
           onShareNote={(id) => setShareNoteId(id)}
           onMoveNote={moveNote}
+          onTogglePin={togglePin}
           fullWidth={isMobile}
         />
       )}
