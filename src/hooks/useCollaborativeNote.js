@@ -10,7 +10,7 @@ import { u8ToB64, b64ToU8 } from "../utils/base64";
 const REMOTE_ORIGIN = "firestore-remote";
 const INIT_ORIGIN = "firestore-init";
 
-const WS_URL = process.env.REACT_APP_COLLAB_WS_URL || "";
+const WS_URL = import.meta.env.REACT_APP_COLLAB_WS_URL || "";
 const SAVE_DEBOUNCE_MS = 700;
 
 /**

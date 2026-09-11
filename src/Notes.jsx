@@ -25,7 +25,7 @@ import {
   Alert,
 } from "@mui/material";
 import { ArrowLeft } from "lucide-react";
-import Tiptap from "./components/TiptapEditor/Tiptap.js";
+import Tiptap from "./components/TiptapEditor/Tiptap";
 import Sidebar from "./components/notes/Sidebar";
 import ShareDialog from "./components/notes/ShareDialog";
 import PromptDialog from "./components/notes/PromptDialog";
@@ -97,9 +97,12 @@ const Notes = () => {
     };
   }, [user]);
 
-  // Keep selection valid.
+  // Keep selection valid (drop notes that vanished or were moved to Trash).
   useEffect(() => {
-    if (selectedNoteId && !notes.some((n) => n.id === selectedNoteId)) {
+    if (
+      selectedNoteId &&
+      !notes.some((n) => n.id === selectedNoteId && !n.deletedAt)
+    ) {
       setSelectedNoteId(null);
     }
   }, [notes, selectedNoteId]);
@@ -150,24 +153,49 @@ const Notes = () => {
     return updateDoc(doc(db, "folders", id), { name: name.trim() || "Untitled" });
   }, []);
 
+  // Soft delete: move to Trash (reversible) instead of destroying the doc.
   const deleteNote = useCallback(
+    async (id) => {
+      await updateDoc(doc(db, "notes", id), { deletedAt: serverTimestamp() });
+      if (selectedNoteId === id) setSelectedNoteId(null);
+      notify("Note moved to Trash");
+    },
+    [selectedNoteId, notify]
+  );
+
+  const restoreNote = useCallback(
+    async (id) => {
+      await updateDoc(doc(db, "notes", id), { deletedAt: null });
+      notify("Note restored");
+    },
+    [notify]
+  );
+
+  const deleteNoteForever = useCallback(
     async (id) => {
       await deleteDoc(doc(db, "notes", id));
       if (selectedNoteId === id) setSelectedNoteId(null);
-      notify("Note deleted");
+      notify("Note permanently deleted");
     },
     [selectedNoteId, notify]
   );
 
   const deleteFolder = useCallback(async (folderId) => {
-    // Un-file this folder's notes, then remove the folder.
+    // Un-file this folder's notes, then remove the folder. Scope the query to
+    // the user's own notes: Firestore rejects (not filters) any query that
+    // could return docs the security rules forbid reading, so an ownership-less
+    // query throws permission-denied and the delete never runs.
     const snap = await getDocs(
-      query(collection(db, "notes"), where("folderId", "==", folderId))
+      query(
+        collection(db, "notes"),
+        where("userId", "==", user.uid),
+        where("folderId", "==", folderId)
+      )
     );
     await Promise.all(snap.docs.map((d) => updateDoc(d.ref, { folderId: null })));
     await deleteDoc(doc(db, "folders", folderId));
     notify("Folder deleted");
-  }, [notify]);
+  }, [user, notify]);
 
   const moveNote = useCallback((noteId, folderId) => {
     return updateDoc(doc(db, "notes", noteId), { folderId: folderId || null });
@@ -223,12 +251,12 @@ const Notes = () => {
       onSubmit: (v) => renameFolder(folder.id, v),
     });
 
-  const openDeleteNote = (note) =>
+  const openDeleteNoteForever = (note) =>
     setConfirm({
-      title: "Delete note?",
+      title: "Delete forever?",
       body: `"${note.title || "Untitled"}" will be permanently deleted. This cannot be undone.`,
-      confirmLabel: "Delete",
-      onConfirm: () => deleteNote(note.id),
+      confirmLabel: "Delete forever",
+      onConfirm: () => deleteNoteForever(note.id),
     });
 
   const openDeleteFolder = (folder) =>
@@ -256,7 +284,9 @@ const Notes = () => {
           onNewNote={openNewNote}
           onNewFolder={openNewFolder}
           onRenameNote={openRenameNote}
-          onDeleteNote={openDeleteNote}
+          onDeleteNote={(note) => deleteNote(note.id)}
+          onRestoreNote={(note) => restoreNote(note.id)}
+          onDeleteNoteForever={openDeleteNoteForever}
           onRenameFolder={openRenameFolder}
           onDeleteFolder={openDeleteFolder}
           onShareNote={(id) => setShareNoteId(id)}
@@ -345,8 +375,13 @@ const Notes = () => {
           confirmLabel={confirm.confirmLabel}
           onClose={() => setConfirm(null)}
           onConfirm={async () => {
-            await confirm.onConfirm();
-            setConfirm(null);
+            try {
+              await confirm.onConfirm();
+              setConfirm(null);
+            } catch (err) {
+              console.error("[notes] action failed:", err);
+              notify(err.message || "Something went wrong", "error");
+            }
           }}
         />
       )}

@@ -24,6 +24,7 @@ import {
   Trash2,
   Users,
   FolderInput,
+  RotateCcw,
 } from "lucide-react";
 import { relativeTime } from "../utils/relativeTime";
 
@@ -41,6 +42,8 @@ export default function Sidebar({
   onNewFolder,
   onRenameNote,
   onDeleteNote,
+  onRestoreNote,
+  onDeleteNoteForever,
   onRenameFolder,
   onDeleteFolder,
   onShareNote,
@@ -51,6 +54,7 @@ export default function Sidebar({
   const [noteMenu, setNoteMenu] = useState(null); // { anchorEl, note }
   const [folderMenu, setFolderMenu] = useState(null); // { anchorEl, folder }
   const [moveMenu, setMoveMenu] = useState(null); // { anchorEl, note }
+  const [trashMenu, setTrashMenu] = useState(null); // { anchorEl, note }
   const theme = useTheme();
   const accent = theme.palette.primary.main;
 
@@ -62,8 +66,18 @@ export default function Sidebar({
     (n.title || "").toLowerCase().includes(q) ||
     (n.snapshot || "").toLowerCase().includes(q);
 
-  const owned = useMemo(() => notes.filter((n) => !n.shared), [notes]);
-  const shared = useMemo(() => notes.filter((n) => n.shared), [notes]);
+  const owned = useMemo(
+    () => notes.filter((n) => !n.shared && !n.deletedAt),
+    [notes]
+  );
+  const shared = useMemo(
+    () => notes.filter((n) => n.shared && !n.deletedAt),
+    [notes]
+  );
+  const trashed = useMemo(
+    () => notes.filter((n) => !n.shared && n.deletedAt),
+    [notes]
+  );
 
   const notesInFolder = (folderId) =>
     owned.filter((n) => (n.folderId || null) === folderId && matches(n));
@@ -280,6 +294,67 @@ export default function Sidebar({
             {sharedFiltered.map((n) => renderNoteRow(n, { canManage: false }))}
           </>
         )}
+
+        {/* Trash */}
+        {trashed.length > 0 && !q && (
+          <Box sx={{ mt: 1.5 }}>
+            <Box
+              onClick={() => toggle("__trash")}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 0.5,
+                px: 1,
+                py: 0.5,
+                borderRadius: "4px",
+                cursor: "pointer",
+                color: "text.secondary",
+                "&:hover": { bgcolor: "custom.surfaceMuted" },
+              }}
+            >
+              {collapsed["__trash"] ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+              <Trash2 size={14} />
+              <Typography variant="overline" sx={{ fontSize: 11, flex: 1 }}>
+                Trash
+              </Typography>
+              <Typography variant="caption">{trashed.length}</Typography>
+            </Box>
+            {!collapsed["__trash"] &&
+              trashed.map((note) => (
+                <Box
+                  key={note.id}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    pl: 1.5,
+                    pr: 0.5,
+                    py: 0.75,
+                    borderRadius: "4px",
+                    "&:hover": { bgcolor: "custom.surfaceMuted" },
+                    "&:hover .trash-actions": { opacity: 1 },
+                  }}
+                >
+                  <FileText size={15} style={{ flexShrink: 0, opacity: 0.5 }} />
+                  <Typography
+                    variant="body2"
+                    noWrap
+                    sx={{ minWidth: 0, flex: 1, color: "text.secondary" }}
+                  >
+                    {note.title || "Untitled"}
+                  </Typography>
+                  <IconButton
+                    className="trash-actions"
+                    size="small"
+                    onClick={(e) => setTrashMenu({ anchorEl: e.currentTarget, note })}
+                    sx={{ opacity: 0, transition: "opacity 120ms" }}
+                  >
+                    <MoreHorizontal size={16} />
+                  </IconButton>
+                </Box>
+              ))}
+          </Box>
+        )}
       </Box>
 
       {/* Note menu */}
@@ -367,6 +442,38 @@ export default function Sidebar({
             {f.name}
           </MenuItem>
         ))}
+      </Menu>
+
+      {/* Trash menu */}
+      <Menu
+        anchorEl={trashMenu?.anchorEl}
+        open={Boolean(trashMenu)}
+        onClose={() => setTrashMenu(null)}
+      >
+        <MenuItem
+          onClick={() => {
+            onRestoreNote(trashMenu.note);
+            setTrashMenu(null);
+          }}
+        >
+          <ListItemIcon>
+            <RotateCcw size={16} />
+          </ListItemIcon>
+          Restore
+        </MenuItem>
+        <Divider />
+        <MenuItem
+          onClick={() => {
+            onDeleteNoteForever(trashMenu.note);
+            setTrashMenu(null);
+          }}
+          sx={{ color: "error.main" }}
+        >
+          <ListItemIcon>
+            <Trash2 size={16} color="currentColor" />
+          </ListItemIcon>
+          Delete forever
+        </MenuItem>
       </Menu>
 
       {/* Folder menu */}
