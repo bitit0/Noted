@@ -283,7 +283,11 @@ export function SimpleEditor({ noteId, userId, username, editable = true }) {
         setWordCount(text ? text.split(/\s+/).length : 0);
         if (snapshotTimer.current) clearTimeout(snapshotTimer.current);
         snapshotTimer.current = setTimeout(() => {
-          persistMeta({ snapshot: ed.getText().slice(0, 240) });
+          const text = ed.getText();
+          // snapshot = short preview; searchText = fuller body for search.
+          // ponytail: 20k-char cap bounds the notes-list payload; a real
+          // search index is the upgrade past that.
+          persistMeta({ snapshot: text.slice(0, 240), searchText: text.slice(0, 20000) });
         }, TITLE_SAVE_MS);
       },
     },

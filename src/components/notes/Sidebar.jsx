@@ -67,7 +67,7 @@ export default function Sidebar({
   const matches = (n) =>
     !q ||
     (n.title || "").toLowerCase().includes(q) ||
-    (n.snapshot || "").toLowerCase().includes(q);
+    (n.searchText || n.snapshot || "").toLowerCase().includes(q);
 
   // Pinned notes are lifted out of their normal section into a Pinned list.
   const owned = useMemo(
