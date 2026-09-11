@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useAuth } from "../context/AuthContext";
-import { Button } from "@mui/material";
+import { Button, Box, Alert } from "@mui/material";
 
 // Monochrome-friendly Google "G" mark.
 function GoogleMark() {
@@ -14,33 +14,59 @@ function GoogleMark() {
   );
 }
 
+// Map Firebase auth error codes to something a user can act on.
+function messageFor(err) {
+  switch (err.code) {
+    case "auth/popup-closed-by-user":
+    case "auth/cancelled-popup-request":
+      return ""; // user dismissed the popup — not an error worth showing
+    case "auth/unauthorized-domain":
+      return "This site isn't an authorized domain for sign-in. Add it in Firebase → Authentication → Settings → Authorized domains.";
+    case "auth/popup-blocked":
+      return "Your browser blocked the sign-in popup. Allow popups for this site and try again.";
+    case "auth/operation-not-allowed":
+      return "Google sign-in isn't enabled for this project. Enable it in Firebase → Authentication → Sign-in method.";
+    default:
+      return err.message || "Sign-in failed. Please try again.";
+  }
+}
+
 const GoogleLogin = () => {
   const { signInWithGoogle } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
   const handleClick = async () => {
     setSubmitting(true);
+    setError("");
     try {
       await signInWithGoogle();
     } catch (err) {
-      // Popup closed / blocked — nothing to surface loudly.
-      console.error("Google sign-in failed:", err.message);
+      console.error("Google sign-in failed:", err.code, err.message);
+      setError(messageFor(err));
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Button
-      variant="outlined"
-      fullWidth
-      onClick={handleClick}
-      disabled={submitting}
-      startIcon={<GoogleMark />}
-      sx={{ py: 1 }}
-    >
-      Continue with Google
-    </Button>
+    <Box>
+      <Button
+        variant="outlined"
+        fullWidth
+        onClick={handleClick}
+        disabled={submitting}
+        startIcon={<GoogleMark />}
+        sx={{ py: 1 }}
+      >
+        Continue with Google
+      </Button>
+      {error && (
+        <Alert severity="error" sx={{ mt: 1, borderRadius: "4px", py: 0.25 }}>
+          {error}
+        </Alert>
+      )}
+    </Box>
   );
 };
 
